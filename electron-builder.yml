@@ -1,0 +1,44 @@
+appId: com.zzl.tempo
+productName: 简程
+copyright: Copyright © 2026 zzl
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**
+  - package.json
+# koffi 的原生库位于 @koromix/koffi-<平台> 包中，需要解包到 asar 之外才能加载
+asarUnpack:
+  - node_modules/koffi/**
+  - node_modules/@koromix/**
+extraResources:
+  - from: resources/tray.png
+    to: tray.png
+  - from: resources/tray@2x.png
+    to: tray@2x.png
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/THIRD_PARTY_NOTICES.txt
+    to: THIRD_PARTY_NOTICES.txt
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Jiancheng-Setup-${version}.exe
+  shortcutName: 简程
+  uninstallDisplayName: 简程 ${version}
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+npmRebuild: false
+# 自动更新：安装包发布到 GitHub 上只放安装包的公开仓库（源码不公开）
+publish:
+  provider: github
+  owner: zonglingzhang0-a11y
+  repo: jiancheng-releases
+  releaseType: release
