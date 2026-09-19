@@ -138,7 +138,7 @@ export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: numb
       .filter((f) => !world.get(f.key))
       .map((f) => {
         const el = els.current.get(f.key)
-        return { id: f.key, w: el?.offsetWidth ?? 96, h: el?.offsetHeight ?? 30, sunk: look.gravity && f.done }
+        return { id: f.key, w: el?.offsetWidth ?? 96, h: el?.offsetHeight ?? 30, sunk: look.gravity && f.done, order: f.doneAt }
       })
     world.place(fresh, [30, size.h - 54], 0.4)
     for (const b of world.bodies) {
@@ -153,17 +153,17 @@ export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: numb
 
   useEffect(() => {
     const T = performance.now() / 1000
-    for (const f of floats) world.setSunk(f.key, look.gravity && f.done, T)
+    for (const f of floats) world.setSunk(f.key, look.gravity && f.done, T, f.doneAt)
   }, [floats, look.gravity, world])
 
   useEffect(
     () =>
       runLoop(
         (T) => world.step(T, reduced() ? 0 : speed.current),
-        (T) => {
+        () => {
           for (const b of world.bodies) {
             const el = els.current.get(b.id)
-            if (el) placeBody(b, el, T)
+            if (el) placeBody(b, el)
           }
         }
       ),
@@ -250,6 +250,7 @@ export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: numb
       else if (look.gravity && item.done) {
         b.mode = 'sink'
         b.sinkAt = performance.now() / 1000 - 0.6
+        b.cap = 0
         b.vx = 0
         b.vy = 0
       } else {

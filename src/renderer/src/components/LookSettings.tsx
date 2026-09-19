@@ -350,7 +350,7 @@ export function LookSettings(): React.JSX.Element {
           <Row label="倒计时环" hint="大钟旁边显示当前日程还剩多久">
             <Switch checked={look.ring} onChange={(v) => updateLook({ ring: v })} />
           </Row>
-          <Row label="完成后沉底" hint="漂着的待办完成后慢慢沉到色带底部">
+          <Row label="完成后排到左下角" hint="漂着的待办完成后，按完成的先后慢慢移到左下角排成一行，排满了往上叠">
             <Switch checked={look.gravity} onChange={(v) => updateLook({ gravity: v })} />
           </Row>
           <Row label="漂浮速度">

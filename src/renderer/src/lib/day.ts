@@ -10,6 +10,8 @@ export interface DayItem {
   key: string
   done: boolean
   by: 'manual' | 'auto' | null
+  /** 完成的时间，决定完成后在左下角排第几个 */
+  doneAt: number
   /** 分钟；随时待办为 null */
   start: number | null
   end: number | null
@@ -32,6 +34,7 @@ function build(data: AppData, progress: Record<string, AutoProgress>, task: Task
     key,
     done: c?.done ?? p?.done ?? false,
     by: c?.done ? c.by : p?.done ? 'auto' : null,
+    doneAt: c?.done ? c.at : Number.MAX_SAFE_INTEGER,
     start: task.start ? toMin(task.start) : null,
     end: task.end ? toMin(task.end) : task.start ? toMin(task.start) + 60 : null,
     carried,
@@ -44,11 +47,13 @@ function build(data: AppData, progress: Record<string, AutoProgress>, task: Task
 export function dayItems(data: AppData, progress: Record<string, AutoProgress>, date: string): DayItem[] {
   const items = tasksOn(data.tasks, date).map((t) => build(data, progress, t, date, 0))
   if (date === todayKey()) {
-    // 最近几天没做完的一次性待办（不限时间），顺延到今天继续漂着
+    // 最近几天没做完的一次性待办（不限时间），顺延到今天继续漂着；今天才做完的留到今天结束
     const from = addDays(date, -CARRY_DAYS)
+    const dayStart = fromKey(date).getTime()
     for (const t of data.tasks) {
       if (t.repeat.type !== 'none' || t.start || t.date >= date || t.date < from) continue
-      if (data.completions[occurrenceKey(t.id, t.date)]?.done) continue
+      const c = data.completions[occurrenceKey(t.id, t.date)]
+      if (c?.done && c.at < dayStart) continue
       const days = Math.round((fromKey(date).getTime() - fromKey(t.date).getTime()) / 86400000)
       items.push(build(data, progress, t, t.date, days))
     }

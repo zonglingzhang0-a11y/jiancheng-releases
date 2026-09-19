@@ -56,7 +56,8 @@ function useFloaters(opts: {
   statics: (W: number, H: number) => { l: number; r: number; t: number; b: number }[]
   lanes: (H: number) => [number, number]
   cruise: number
-  g: number
+  /** 完成后排在左下角：离边框的距离、彼此的间距 */
+  shelf: [number, number]
   gravity: boolean
   speed: number
   paused: boolean
@@ -80,7 +81,8 @@ function useFloaters(opts: {
     if (!size.w) return
     world.W = size.w
     world.H = size.h
-    world.g = opts.g
+    world.shelfPad = opts.shelf[0]
+    world.shelfGap = opts.shelf[1]
     world.statics = opts.statics(size.w, size.h)
     const keys = new Set(opts.items.map((i) => i.key))
     world.bodies = world.bodies.filter((b) => keys.has(b.id))
@@ -88,7 +90,7 @@ function useFloaters(opts: {
       .filter((i) => !world.get(i.key))
       .map((i) => {
         const el = els.get(i.key)
-        return { id: i.key, w: el?.offsetWidth ?? 8, h: el?.offsetHeight ?? 8, sunk: opts.gravity && i.done }
+        return { id: i.key, w: el?.offsetWidth ?? 8, h: el?.offsetHeight ?? 8, sunk: opts.gravity && i.done, order: i.doneAt }
       })
     world.place(fresh, opts.lanes(size.h), opts.cruise)
     for (const b of world.bodies) {
@@ -100,17 +102,17 @@ function useFloaters(opts: {
     }
     world.clampAll()
     const T = performance.now() / 1000
-    for (const i of opts.items) world.setSunk(i.key, opts.gravity && i.done, T)
+    for (const i of opts.items) world.setSunk(i.key, opts.gravity && i.done, T, i.doneAt)
   })
 
   useEffect(
     () =>
       runLoop(
         (T) => world.step(T, mul.current),
-        (T) => {
+        () => {
           for (const b of world.bodies) {
             const el = els.get(b.id)
-            if (el) placeBody(b, el, T)
+            if (el) placeBody(b, el)
           }
         }
       ),
@@ -154,7 +156,7 @@ export function DeskCard(props: Props): React.JSX.Element {
     statics: (W) => timed.map((i) => ({ l: xOf(i.start!) * W, r: xOf(i.end!) * W - 2, t: 20, b: 36 })),
     lanes: (H) => [9, H - 9],
     cruise: 0.16,
-    g: 0.35,
+    shelf: [4, 3],
     gravity: look.gravity,
     speed: look.floatSpeed,
     paused
@@ -165,7 +167,7 @@ export function DeskCard(props: Props): React.JSX.Element {
     statics: () => [],
     lanes: () => [38, 76],
     cruise: 0.22,
-    g: 0.7,
+    shelf: [6, 5],
     gravity: look.gravity,
     speed: look.floatSpeed,
     paused

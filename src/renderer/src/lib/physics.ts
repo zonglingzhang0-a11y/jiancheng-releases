@@ -1,9 +1,11 @@
 // 失重漂浮：自写的轴对齐碰撞，只反弹、不打转、不随机变向
+// 完成的待办按完成先后慢慢移到左下角，排成一行，排满了叠到上一行
 // 速度单位是「像素 / 步」，一步 = 1/60 秒
 import { smooth } from './ribbon'
 
 export const STEP = 1000 / 60
 
+/** drift：漂浮 · sink：正在移向左下角的位置 · rest：已经排好 · held：被拖着 */
 export type Mode = 'drift' | 'sink' | 'rest' | 'held'
 
 export interface Body {
@@ -22,7 +24,15 @@ export interface Body {
   ph: number
   sinkAt: number
   rot: number
-  support: boolean
+  /** 已完成：在左下角占一个位置 */
+  done: boolean
+  /** 完成的先后，决定排在第几个 */
+  order: number
+  /** 排好后的位置 */
+  tx: number
+  ty: number
+  /** 这一趟的最大速度，按距离定：远的走快一点，总时长差不多 */
+  cap: number
   sunk?: boolean
 }
 
@@ -38,8 +48,9 @@ export class World {
   statics: Rect[] = []
   W = 1
   H = 1
-  /** 下沉的力度（高度越矮的区域越小，保证下沉看起来一样慢） */
-  g = 1
+  /** 完成的待办离左、下边框的距离，以及彼此的间距 */
+  shelfPad = 8
+  shelfGap = 6
   private seq = 0
 
   get(id: string): Body | undefined {
@@ -69,15 +80,19 @@ export class World {
       vy: mode === 'drift' ? Math.sin(dir) * c : 0,
       sinkAt: -99,
       rot: 0,
-      support: false
+      done: false,
+      order: 0,
+      tx: x,
+      ty: y,
+      cap: 0
     }
   }
 
   /**
-   * 新加入的物体摆放：漂浮的分上下两条航道均匀排开，已完成的直接躺在底部
+   * 新加入的物体摆放：漂浮的分上下两条航道均匀排开，已完成的直接放在左下角排好的位置
    * lanes 为两条航道中心的 y 坐标
    */
-  place(fresh: { id: string; w: number; h: number; sunk: boolean }[], lanes: [number, number], cruise: number): void {
+  place(fresh: { id: string; w: number; h: number; sunk: boolean; order: number }[], lanes: [number, number], cruise: number): void {
     const flying = fresh.filter((f) => !f.sunk)
     const resting = fresh.filter((f) => f.sunk)
     flying.forEach((f, i) => {
@@ -87,10 +102,39 @@ export class World {
       const x = (this.W * (k + 0.5 + lane * 0.35)) / (n + lane * 0.35)
       this.bodies.push(this.make(f.id, x, lanes[lane] + ((k % 3) - 1) * (lane ? 3 : 5), f.w, f.h, 'drift', cruise))
     })
-    resting.forEach((f, i) => {
-      this.bodies.push(this.make(f.id, (this.W * (i + 0.7)) / (resting.length + 0.4), this.H - f.h / 2, f.w, f.h, 'rest', cruise))
+    const added = resting.map((f) => {
+      const b = this.make(f.id, 0, 0, f.w, f.h, 'rest', cruise)
+      b.done = true
+      b.order = f.order
+      this.bodies.push(b)
+      return b
     })
+    this.shelve()
+    for (const b of added) {
+      b.x = b.tx
+      b.y = b.ty
+    }
     this.clampAll()
+  }
+
+  /** 算出每个已完成待办的位置：从左下角起按完成先后排成一行，排满了叠到上一行 */
+  shelve(): void {
+    const { W, H, shelfPad: pad, shelfGap: gap } = this
+    const list = this.bodies.filter((b) => b.done).sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1))
+    let x = pad
+    let bottom = H - pad
+    let rowH = 0
+    for (const b of list) {
+      if (x > pad && x + b.w > W - pad) {
+        bottom -= rowH + gap
+        x = pad
+        rowH = 0
+      }
+      b.tx = x + b.w / 2
+      b.ty = Math.max(b.h / 2, bottom - b.h / 2)
+      x += b.w + gap
+      rowH = Math.max(rowH, b.h)
+    }
   }
 
   clampAll(): void {
@@ -100,13 +144,17 @@ export class World {
     }
   }
 
-  /** 完成 / 取消完成：完成的慢慢沉底；取消完成的给一个向上的初速度重新漂起来 */
-  setSunk(id: string, sunk: boolean, T: number): void {
+  /** 完成 / 取消完成：完成的慢慢移到左下角排好；取消完成的给一个向上的初速度重新漂起来 */
+  setSunk(id: string, sunk: boolean, T: number, order = 0): void {
     const b = this.get(id)
-    if (!b || b.mode === 'held') return
+    if (!b) return
+    b.done = sunk
+    b.order = order
+    if (b.mode === 'held') return
     if (sunk && b.mode === 'drift') {
       b.mode = 'sink'
       b.sinkAt = T
+      b.cap = 0
     } else if (!sunk && (b.mode === 'sink' || b.mode === 'rest')) {
       b.mode = 'drift'
       b.dir = -Math.PI / 2 + (Math.sin(b.ph) > 0 ? 0.5 : -0.5)
@@ -116,8 +164,8 @@ export class World {
   }
 
   step(T: number, mul: number): void {
+    this.shelve()
     for (const b of this.bodies) {
-      b.support = false
       if (b.mode === 'held') continue
       if (b.mode === 'drift') {
         // 巡航：只把速度大小慢慢拉回设定值，方向完全由碰撞决定
@@ -135,19 +183,44 @@ export class World {
           b.vy *= k
         }
       } else {
-        // 下沉：先停 0.6 秒，再用 2.5 秒慢慢加速，边沉边轻摆；沉底后不再动
-        const k = b.mode === 'rest' ? 1 : smooth((T - b.sinkAt - 0.6) / 2.5)
-        b.vx = b.vx * (b.mode === 'rest' ? 0.8 : 0.94) + (b.mode === 'sink' ? Math.sin(T * 1.2 + b.ph) * 0.005 * k * this.g : 0)
-        b.vy = b.vy * 0.94 + 0.024 * k * this.g
+        const dx = b.tx - b.x
+        const dy = b.ty - b.y
+        const dist = Math.hypot(dx, dy)
+        // 排好的位置变了（前面有待办取消完成、窗口变宽窄），再慢慢挪过去
+        if (b.mode === 'rest' && dist > 1) {
+          b.mode = 'sink'
+          b.sinkAt = T - 0.6
+          b.cap = 0
+        }
+        // 不漂动（减少动态效果、卡片移开变淡）时直接放到位
+        if (b.mode === 'rest' || mul <= 0) {
+          b.x = b.tx
+          b.y = b.ty
+          b.vx = 0
+          b.vy = 0
+          if (b.mode === 'sink') b.mode = 'rest'
+          continue
+        }
+        // 先停 0.6 秒，再用 2 秒慢慢起步，像被轻轻牵着移过去；约 4 秒到位
+        if (!b.cap) b.cap = Math.max(1.2, Math.min(6, dist / 110))
+        const k = 0.002 * smooth((T - b.sinkAt - 0.6) / 2)
+        b.vx = (b.vx + dx * k) * 0.925
+        b.vy = (b.vy + dy * k) * 0.925
+        const v = Math.hypot(b.vx, b.vy)
+        if (v > b.cap) {
+          b.vx *= b.cap / v
+          b.vy *= b.cap / v
+        }
+        if (dist < 0.5 && v < 0.05 && T - b.sinkAt > 0.6) {
+          b.mode = 'rest'
+          continue
+        }
       }
       b.x += b.vx
       b.y += b.vy
     }
     for (let i = 0; i < 3; i++) this.collide()
-    for (const b of this.bodies) {
-      if (b.mode === 'drift' && (b.vx || b.vy)) b.dir = Math.atan2(b.vy, b.vx)
-      if (b.mode === 'sink' && b.support && T - b.sinkAt > 3.1 && Math.abs(b.vy) < 0.06) b.mode = 'rest'
-    }
+    for (const b of this.bodies) if (b.mode === 'drift' && (b.vx || b.vy)) b.dir = Math.atan2(b.vy, b.vx)
   }
 
   private collide(): void {
@@ -171,7 +244,6 @@ export class World {
       if (b.y + hh > H) {
         b.y = H - hh
         if (b.vy > 0) b.vy = -b.vy * e
-        b.support = true
       }
       if (b.mode !== 'drift') continue
       for (const s of this.statics) {
@@ -193,21 +265,22 @@ export class World {
   }
 
   private pair(a: Body, b: Body): void {
-    // 下沉中的待办从漂浮的待办后面穿过，只和边框、已沉底的待办接触
-    const passes = (x: Body, y: Body): boolean => x.mode === 'sink' && (y.mode === 'drift' || y.mode === 'held')
-    if (passes(a, b) || passes(b, a)) return
+    // 正在移向左下角的待办从别的待办后面穿过；排好的待办不会被撞动，漂浮的碰到它就弹开
+    if (a.mode === 'sink' || b.mode === 'sink') return
     const ox = Math.min(a.x + a.w / 2, b.x + b.w / 2) - Math.max(a.x - a.w / 2, b.x - b.w / 2)
     const oy = Math.min(a.y + a.h / 2, b.y + b.h / 2) - Math.max(a.y - a.h / 2, b.y - b.h / 2)
     if (ox <= 0 || oy <= 0) return
-    const im = (x: Body): number => (x.mode === 'held' ? 0 : x.mode === 'rest' ? 1 / 40 : 400 / (x.w * x.h))
+    const im = (x: Body): number => (x.mode === 'held' || x.mode === 'rest' ? 0 : 400 / (x.w * x.h))
     const ia = im(a)
     const ib = im(b)
     if (ia + ib === 0) return
+    // 刚排好的待办压在漂浮的上面时，把漂浮的慢慢推开，不要一下子跳开
+    const lim = a.mode === 'rest' || b.mode === 'rest' ? 2 : Infinity
     const e = a.mode === 'drift' || b.mode === 'drift' ? 1 : 0
     if (ox < oy) {
       const d = a.x < b.x ? -1 : 1
-      a.x += (d * ox * ia) / (ia + ib)
-      b.x -= (d * ox * ib) / (ia + ib)
+      a.x += (d * Math.min(ox, lim) * ia) / (ia + ib)
+      b.x -= (d * Math.min(ox, lim) * ib) / (ia + ib)
       const rel = (a.vx - b.vx) * -d
       if (rel > 0) {
         const j = ((1 + e) * rel) / (ia + ib)
@@ -216,23 +289,21 @@ export class World {
       }
     } else {
       const d = a.y < b.y ? -1 : 1
-      a.y += (d * oy * ia) / (ia + ib)
-      b.y -= (d * oy * ib) / (ia + ib)
+      a.y += (d * Math.min(oy, lim) * ia) / (ia + ib)
+      b.y -= (d * Math.min(oy, lim) * ib) / (ia + ib)
       const rel = (a.vy - b.vy) * -d
       if (rel > 0) {
         const j = ((1 + e) * rel) / (ia + ib)
         a.vy += d * j * ia
         b.vy -= d * j * ib
       }
-      if (d < 0 && b.mode !== 'drift') a.support = true
-      if (d > 0 && a.mode !== 'drift') b.support = true
     }
   }
 }
 
-/** 把物体位置写到元素上；下沉时带一点随摆动的倾斜 */
-export function placeBody(b: Body, el: HTMLElement, T: number): void {
-  const tilt = b.mode === 'sink' ? Math.sin(T * 1.2 + b.ph) * 2.5 * smooth((T - b.sinkAt - 0.6) / 2.5) : 0
+/** 把物体位置写到元素上；移向左下角时前端微微抬起 */
+export function placeBody(b: Body, el: HTMLElement): void {
+  const tilt = b.mode === 'sink' ? Math.max(-2.5, Math.min(2.5, -b.vx * 0.8)) : 0
   b.rot += (tilt - b.rot) * 0.06
   el.style.transform = `translate(${(b.x - b.w / 2).toFixed(1)}px, ${(b.y - b.h / 2).toFixed(1)}px)${Math.abs(b.rot) > 0.02 ? ` rotate(${b.rot.toFixed(2)}deg)` : ''}`
   const sunk = b.mode === 'sink' || b.mode === 'rest'

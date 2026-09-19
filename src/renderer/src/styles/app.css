@@ -1031,7 +1031,7 @@
 }
 .gap {
   position: absolute;
-  bottom: 9px;
+  top: 50%;
   z-index: 1;
   padding: 1px 7px;
   border-radius: 9px;
@@ -1040,7 +1040,7 @@
   white-space: nowrap;
   pointer-events: none;
   background: rgba(255, 255, 255, 0.55);
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   animation: fadeIn 0.4s var(--ease-out);
 }
 .gap::before,
