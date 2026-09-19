@@ -200,7 +200,7 @@ function UpdateRow(): React.JSX.Element {
   const time = update.checkedAt ? new Date(update.checkedAt).toTimeString().slice(0, 5) : ''
   const desc =
     update.state === 'dev'
-      ? '开发版不检查更新'
+      ? '测试版不检查更新，也不会被正式版的更新覆盖'
       : update.state === 'checking'
         ? '正在检查…'
         : update.state === 'latest'
@@ -213,7 +213,7 @@ function UpdateRow(): React.JSX.Element {
                 ? update.message ?? '检查更新失败'
                 : '启动后会自动检查，之后每 4 小时检查一次'
   return (
-    <Row title={`简程 ${__APP_VERSION__}`} desc={desc}>
+    <Row title={`简程${IS_TEST_BUILD ? ' 测试版' : ''} ${__APP_VERSION__}`} desc={desc}>
       {update.state === 'ready' ? (
         <button className="btn btn-primary btn-sm" onClick={() => api().installUpdate()}>
           重启更新

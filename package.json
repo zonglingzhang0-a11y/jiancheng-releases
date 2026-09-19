@@ -1,7 +1,7 @@
 {
   "name": "tempo-planner",
   "productName": "简程",
-  "version": "1.0.0",
+  "version": "1.1.0-beta.1",
   "description": "简程 · 以今天为中心的日程规划，按应用使用情况自动完成任务",
   "main": "./out/main/index.js",
   "author": "zzl",
@@ -12,9 +12,10 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dist": "electron-vite build && electron-builder --win --publish never",
-    "icons": "node scripts/gen-icons.cjs",
-    "release": "electron-vite build && electron-builder --win --publish always"
+    "beta": "node scripts/build.cjs beta",
+    "dist": "node scripts/build.cjs dist",
+    "release": "node scripts/build.cjs release",
+    "icons": "node scripts/gen-icons.cjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

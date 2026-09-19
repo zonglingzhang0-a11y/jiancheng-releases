@@ -2,6 +2,7 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateStatus } from '@shared/types'
+import { IS_TEST } from './channel'
 
 const HOURS = 3600_000
 
@@ -32,8 +33,8 @@ export class Updater {
   }
 
   start(): void {
-    // 开发模式下没有打包信息，不检查
-    if (!app.isPackaged) {
+    // 开发模式和测试版不检查：测试版只在本机试用，不会被正式版的更新覆盖
+    if (IS_TEST) {
       this.set({ state: 'dev' })
       return
     }
@@ -61,7 +62,7 @@ export class Updater {
   }
 
   check(): void {
-    if (!app.isPackaged) return
+    if (IS_TEST) return
     if (this.status.state === 'checking' || this.status.state === 'downloading' || this.status.state === 'ready') return
     autoUpdater.checkForUpdates().catch(() => {
       /* 错误已在 error 事件里处理 */

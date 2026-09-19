@@ -19,7 +19,8 @@ export function woff2Only(): Plugin {
   }
 }
 
-export default defineConfig({
+// 开发模式（serve）和带预发布号的版本都是测试版，标题栏显示「测试版」
+export default defineConfig(({ command }) => ({
   main: {
     resolve: { alias: shared },
     build: { externalizeDeps: true }
@@ -30,7 +31,10 @@ export default defineConfig({
   },
   renderer: {
     resolve: { alias: { ...shared, '@renderer': resolve('src/renderer/src') } },
-    define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+      IS_TEST_BUILD: JSON.stringify(command === 'serve' || pkg.version.includes('-'))
+    },
     plugins: [woff2Only(), react()]
   }
-})
+}))

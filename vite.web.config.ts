@@ -15,7 +15,7 @@ export default defineConfig({
       '@renderer': resolve(__dirname, 'src/renderer/src')
     }
   },
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), IS_TEST_BUILD: 'true' },
   plugins: [woff2Only(), react()],
   server: { port: 5199 }
 })

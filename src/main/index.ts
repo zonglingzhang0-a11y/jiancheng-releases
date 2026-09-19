@@ -11,13 +11,14 @@ import { RuleEngine } from './rules'
 import { Capturer } from './capture'
 import { broadcast, DeskCard, loadRoute, QuickPanel, registerHotkey } from './windows'
 import { Updater } from './updater'
+import { APP_ID, APP_NAME, DATA_DIR } from './channel'
 
-const APP_ID = 'com.zzl.tempo'
 const SHOT_SCHEME = 'jc-shot'
 const startHidden = process.argv.includes('--hidden')
 
-// 开发版与安装版共用同一个数据目录
-app.setPath('userData', join(app.getPath('appData'), 'Jiancheng'))
+// 正式版用 %APPDATA%\Jiancheng；测试版（开发模式、beta 安装包）用 Jiancheng-Test，
+// 单实例锁跟着数据目录走，所以测试版和正式版可以同时开着、互不干扰
+app.setPath('userData', join(app.getPath('appData'), DATA_DIR))
 
 // 本地截图通过自定义协议提供给界面，避免直接暴露 file:// 路径
 protocol.registerSchemesAsPrivileged([
@@ -103,7 +104,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: '简程',
+    title: APP_NAME,
     icon: resource('icon.png'),
     backgroundColor: TITLE_BAR.color,
     titleBarStyle: 'hidden',
@@ -127,7 +128,7 @@ function createWindow(): void {
       if (!trayHintShown && Notification.isSupported()) {
         trayHintShown = true
         const keys = hotkey.ok && hotkey.accelerator ? `按 ${hotkey.accelerator} 或` : ''
-        new Notification({ title: '简程仍在后台运行', body: `${keys}单击托盘图标打开快捷面板，双击打开主窗口。`, silent: true }).show()
+        new Notification({ title: `${APP_NAME}仍在后台运行`, body: `${keys}单击托盘图标打开快捷面板，双击打开主窗口。`, silent: true }).show()
       }
     } else {
       // 快捷面板和桌角卡片仍存在，需主动退出
@@ -160,7 +161,7 @@ function showWindow(nav?: NavTarget): void {
 function updateTray(): void {
   if (!tray) return
   const s = data.settings
-  tray.setToolTip(`简程${s.monitorEnabled ? ' · 智能监测中' : ' · 监测已暂停'}${hotkey.ok && hotkey.accelerator ? `\n${hotkey.accelerator} 打开快捷面板` : ''}`)
+  tray.setToolTip(`${APP_NAME}${s.monitorEnabled ? ' · 智能监测中' : ' · 监测已暂停'}${hotkey.ok && hotkey.accelerator ? `\n${hotkey.accelerator} 打开快捷面板` : ''}`)
   tray.setContextMenu(
     Menu.buildFromTemplate([
       ...(updater?.status.state === 'ready'

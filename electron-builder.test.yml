@@ -1,0 +1,11 @@
+# 测试版安装包（npm run beta）：在正式版配置上改名字和身份，
+# 和正式版装在不同位置、各有各的开始菜单项和卸载项，可以同时装着
+extends: electron-builder.yml
+appId: com.zzl.tempo.test
+productName: 简程测试版
+directories:
+  output: release/test
+nsis:
+  artifactName: Jiancheng-Test-Setup-${version}.exe
+  shortcutName: 简程测试版
+  uninstallDisplayName: 简程测试版 ${version}

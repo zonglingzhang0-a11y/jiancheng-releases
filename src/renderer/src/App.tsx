@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ArrowDownToLine, Settings2 } from 'lucide-react'
-import { api } from './lib/api'
+import { api, isMock } from './lib/api'
 import { addDays, todayKey } from '@shared/schedule'
 import { useStore, type Page } from './store'
 import { applyLook } from './lib/look'
@@ -29,6 +29,7 @@ function TitleBar(): React.JSX.Element {
       <span className="brand">
         <i className="brand-mark" />
         简程
+        {IS_TEST_BUILD && !isMock() && <span className="brand-test">测试版</span>}
       </span>
       <nav className="tb-nav no-drag" aria-label="页面">
         {PAGES.map((p) => (
