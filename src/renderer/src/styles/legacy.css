@@ -1603,13 +1603,8 @@
   background: var(--accent-soft);
 }
 .qi-token.qi-rule {
-  color: #0f766e;
-  background: color-mix(in srgb, #14b8a6 14%, transparent);
-}
-@media (prefers-color-scheme: dark) {
-  .qi-token.qi-rule {
-    color: #5eead4;
-  }
+  color: #fff;
+  background: var(--ink);
 }
 .qi-title {
   font-size: 12.5px;

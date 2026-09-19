@@ -277,7 +277,7 @@ export function DeskCard(props: Props): React.JSX.Element {
                 if (el) dotEls.set(f.key, el)
                 else dotEls.delete(f.key)
               }}
-              className={cx('dot', f.done && 'done')}
+              className={cx('fdot', f.done && 'done')}
               title={f.task.title}
             />
           ))}
