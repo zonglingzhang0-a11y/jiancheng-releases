@@ -58,6 +58,52 @@ export function occursOn(task: Task, date: string): boolean {
   }
 }
 
+/** 结束在开始那天之后的第几天 */
+export const spanOf = (task: Task): number => Math.max(0, Math.floor(task.days ?? 0))
+
+/**
+ * 一次发生从开始那天 0 点算起的分钟范围 [开始, 结束)。
+ * 全天 / 多天的占满整天；定时间的可以跨过午夜；随时待办返回 null
+ */
+export function occurrenceMinutes(task: Task): [number, number] | null {
+  const span = spanOf(task)
+  if (task.allDay) return [0, (span + 1) * 1440]
+  if (!task.start) return null
+  const s = toMin(task.start)
+  const e = span * 1440 + (task.end ? toMin(task.end) : Math.min(1440, s + 60))
+  return [s, Math.max(e, s + 1)]
+}
+
+/** 全天、多天或持续 24 小时以上的日程：不画在色带上，放进「进行中」 */
+export function isLong(task: Task): boolean {
+  if (task.allDay) return true
+  const r = occurrenceMinutes(task)
+  return !!r && r[1] - r[0] >= 1440
+}
+
+/** 覆盖某一天的所有发生（包括前几天开始、延续到这天的），date 是那次发生开始的日期 */
+export function occurrencesOn(tasks: Task[], date: string): { task: Task; date: string }[] {
+  const out: { task: Task; date: string }[] = []
+  for (const task of tasks) {
+    const r = occurrenceMinutes(task)
+    const reach = r ? Math.max(0, Math.ceil(r[1] / 1440) - 1) : 0
+    for (let k = reach; k >= 0; k--) {
+      const d = k ? addDays(date, -k) : date
+      if (!occursOn(task, d)) continue
+      if (r && !(r[0] < (k + 1) * 1440 && r[1] > k * 1440)) continue
+      out.push({ task, date: d })
+    }
+  }
+  return out
+}
+
+/** 一次发生涉及的日期（开始那天到结束那天） */
+export function occurrenceDates(task: Task, date: string): string[] {
+  const r = occurrenceMinutes(task)
+  const last = r ? Math.max(0, Math.ceil(r[1] / 1440) - 1) : 0
+  return Array.from({ length: last + 1 }, (_, i) => addDays(date, i))
+}
+
 /** 某天的任务：不限时间的在前，其余按开始时间排序 */
 export function tasksOn(tasks: Task[], date: string): Task[] {
   return tasks
@@ -81,14 +127,14 @@ export function ruleMatches(rule: AutoRule, seg: Segment): boolean {
   return false
 }
 
-/** 规则在某个任务发生日的统计时间窗口 [from, to) */
+/** 规则在某次发生的统计时间窗口 [from, to)：仅计划时段按日程的起止，全天按涉及的每一整天 */
 export function ruleWindow(task: Task, date: string): [number, number] {
   const base = fromKey(date).getTime()
   const rule = task.auto
-  if (rule && rule.scope === 'slot' && task.start && task.end) {
-    return [base + toMin(task.start) * 60000, base + toMin(task.end) * 60000]
-  }
-  return [base, base + 24 * 3600000]
+  const r = occurrenceMinutes(task)
+  if (rule && rule.scope === 'slot' && r && !task.allDay) return [base + r[0] * 60000, base + r[1] * 60000]
+  const days = occurrenceDates(task, date).length
+  return [base, fromKey(addDays(date, days)).getTime()]
 }
 
 /** 统计规则在时间窗口内累计匹配的秒数 */

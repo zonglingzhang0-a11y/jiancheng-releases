@@ -2,13 +2,15 @@ import { EventEmitter } from 'events'
 import { promises as fs } from 'fs'
 import { basename, join } from 'path'
 import {
+  addDays,
   formatDuration,
   matchedSeconds,
+  occurrenceDates,
   occurrenceKey,
+  occurrencesOn,
   pad,
   requiredSeconds,
   ruleWindow,
-  tasksOn,
   todayKey
 } from '@shared/schedule'
 import type { AppData, AutoProgress, Segment, Task } from '@shared/types'
@@ -63,6 +65,8 @@ export class RuleEngine extends EventEmitter {
   private progress: Record<string, AutoProgress> = {}
   private fileHits = new Map<string, { checkedAt: number; hit: FileHit | null; sig: string }>()
   private scanning = new Set<string>()
+  /** 以前的日子的活动记录不会再变，读一次就缓存起来（跨天日程要用到） */
+  private past = new Map<string, Segment[]>()
 
   constructor(
     private ctx: {
@@ -111,15 +115,30 @@ export class RuleEngine extends EventEmitter {
       .finally(() => this.scanning.delete(key))
   }
 
+  private segmentsOf(date: string, today: string): Segment[] {
+    // 今天和昨天的可能还在写入（刚过午夜时），不缓存
+    if (date >= addDays(today, -1)) return this.ctx.getSegments(date)
+    let segs = this.past.get(date)
+    if (!segs) {
+      if (this.past.size > 60) this.past.clear()
+      segs = this.ctx.getSegments(date)
+      this.past.set(date, segs)
+    }
+    return segs
+  }
+
   evaluate(): void {
     const data = this.ctx.getData()
-    const date = todayKey()
-    const segments = this.ctx.getSegments(date)
+    const today = todayKey()
     const next: Record<string, AutoProgress> = {}
 
-    for (const task of tasksOn(data.tasks, date)) {
+    // 今天在进行的每一次发生，包括前几天开始、延续到今天的跨天日程
+    for (const { task, date } of occurrencesOn(data.tasks, today)) {
       const rule = task.auto
       if (!rule?.enabled) continue
+      const segments = occurrenceDates(task, date)
+        .filter((d) => d <= today)
+        .flatMap((d) => this.segmentsOf(d, today))
       const key = occurrenceKey(task.id, date)
       const completion = data.completions[key]
       const required = requiredSeconds(rule)

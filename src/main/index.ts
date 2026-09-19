@@ -276,7 +276,8 @@ function registerIpc(): void {
     if (idx >= 0) data.tasks[idx] = next
     else data.tasks.push(next)
     // 规则或时间发生变化时，清除今天由规则自动完成的记录，让它重新判定
-    if (prev && JSON.stringify([prev.auto, prev.start, prev.end]) !== JSON.stringify([next.auto, next.start, next.end])) {
+    const shape = (t: Task): string => JSON.stringify([t.auto, t.start, t.end, t.allDay ?? false, t.days ?? 0])
+    if (prev && shape(prev) !== shape(next)) {
       const key = occurrenceKey(task.id, todayKey())
       if (data.completions[key]?.by === 'auto') delete data.completions[key]
     }

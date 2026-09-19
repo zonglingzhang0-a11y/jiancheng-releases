@@ -17,6 +17,10 @@ export interface QuickParsed {
   date: string
   start: string | null
   end: string | null
+  /** 全天 / 多天 */
+  allDay: boolean
+  /** 结束在开始那天之后的第几天 */
+  days: number
   repeat: Repeat
   auto: { kind: 'app' | 'title'; apps: string[]; keywords: string[]; minutes: number } | null
   tokens: QuickToken[]
@@ -24,7 +28,7 @@ export interface QuickParsed {
 
 const WD: Record<string, number> = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 }
 const WD_LABEL = ['日', '一', '二', '三', '四', '五', '六']
-const CN_NUM: Record<string, number> = { 半: 0.5, 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 }
+const CN_NUM: Record<string, number> = { 半: 0.5, 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }
 
 const dow = (key: string): number => fromKey(key).getDay()
 
@@ -67,6 +71,57 @@ function toHour(h: number, period: string | undefined, fallbackPm: boolean): num
   return fallbackPm && h >= 1 && h <= 6 ? h + 12 : h
 }
 
+const PERIOD = '(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|今晚)?'
+const POINT = '(\\d{1,2})(?:[:：](\\d{2})|点(?:(半)|(\\d{1,2})分?)?)'
+const SEP = '(?:到|至|-|–|—|~|～)'
+/** 能当作日期的说法（用于「A 到 B」） */
+const DW = '(?:大后天|后天|明天|明日|今天|今日|下个?(?:周|星期|礼拜)[一二三四五六日天]|(?:这|本)?(?:周|星期|礼拜)[一二三四五六日天]|\\d{1,2}月\\d{1,2}[日号]?|\\d{1,2}[日号])'
+
+const validKey = (d: string): boolean => {
+  const x = fromKey(d)
+  return !Number.isNaN(x.getTime()) && `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}` === d
+}
+
+/**
+ * 把一个日期说法换成日期；from 不为空时表示「A 到 B」里的 B，取 from 当天或之后最近的那天。
+ * keepPast：「9 月 19 日到 21 日」这种正在进行的时段，开始日期可以在今天之前
+ */
+function dateWord(w: string, today: string, from: string | null, keepPast = false): string | null {
+  const rel = ({ 今天: 0, 今日: 0, 明天: 1, 明日: 1, 后天: 2, 大后天: 3 } as Record<string, number>)[w]
+  if (rel !== undefined) return addDays(today, rel)
+  const ref = from ?? today
+  let m = w.match(/^下个?(?:周|星期|礼拜)([一二三四五六日天])$/)
+  if (m) {
+    const monday = addDays(today, -((dow(today) + 6) % 7) + 7)
+    return addDays(monday, (WD[m[1]] + 6) % 7)
+  }
+  m = w.match(/^(这|本)?(?:周|星期|礼拜)([一二三四五六日天])$/)
+  if (m) {
+    if (from) return addDays(from, (WD[m[2]] - dow(from) + 7) % 7)
+    const monday = addDays(today, -((dow(today) + 6) % 7))
+    const d = addDays(monday, (WD[m[2]] + 6) % 7)
+    return !m[1] && d < today ? addDays(d, 7) : d
+  }
+  const y = fromKey(ref).getFullYear()
+  m = w.match(/^(\d{1,2})月(\d{1,2})[日号]?$/)
+  if (m) {
+    let d = `${y}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`
+    if (d < ref && !keepPast) d = `${y + 1}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`
+    return validKey(d) ? d : null
+  }
+  m = w.match(/^(\d{1,2})[日号]$/)
+  if (m) {
+    const r = fromKey(ref)
+    let d = `${y}-${pad(r.getMonth() + 1)}-${pad(Number(m[1]))}`
+    if (d < ref && !keepPast) {
+      const next = new Date(r.getFullYear(), r.getMonth() + 1, Number(m[1]))
+      d = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`
+    }
+    return validKey(d) ? d : null
+  }
+  return null
+}
+
 export function parseQuick(input: string, opts: { today: string; apps?: QuickApp[] }): QuickParsed {
   const { today } = opts
   const apps = opts.apps ?? []
@@ -104,15 +159,57 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     }
   }
 
+  // ---- 跨天的说法：「到明早 7 点」「到次日 7 点」统一成「次日」，避免「明天」被当成日期 ----
+  s = s.replace(
+    new RegExp(`(${SEP})\\s*(?:明天|明日|明早|次日|第二天|隔天)\\s*(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上)?(?=\\s*\\d)`),
+    (m0: string, sep: string, p?: string) => `${sep} 次日${p ?? (/明早/.test(m0) ? '早上' : '')}`
+  )
+
   // ---- 日期 ----
   let date = today
   let dateFound = false
+  let allDay = false
+  let days = 0
+  let start: number | null = null
+  let end: number | null = null
   const setDate = (d: string): void => {
     date = d
     dateFound = true
   }
+  const pointMin = (mm?: string, half?: string, mm2?: string): number => Number(mm ?? mm2 ?? (half ? 30 : 0))
+  const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
+  /** 「A 到 B」：正在进行的时段（B 还没过）保留今天之前的开始日期，整段都过去了才往后顺延 */
+  const rangeOf = (w1: string, w2: string): [string, string] | null => {
+    const a = dateWord(w1, today, null, true)
+    const b = a && dateWord(w2, today, a)
+    if (a && b && b >= today) return [a, b]
+    const c = dateWord(w1, today, null)
+    const d = c && dateWord(w2, today, c)
+    return c && d ? [c, d] : null
+  }
+
   let m: RegExpMatchArray | null
-  if ((m = take(/大后天|后天|明天|明日|今天|今日/))) {
+  // 周五晚上 6 点到周日晚上 8 点：跨好几天、带时间
+  if ((m = take(new RegExp(`(${DW})\\s*${PERIOD}\\s*${POINT}\\s*${SEP}\\s*(${DW})\\s*${PERIOD}\\s*${POINT}`)))) {
+    const [, w1, p1, h1, m1, half1, mm1, w2, p2, h2, m2, half2, mm2] = m
+    const r = rangeOf(w1, w2)
+    if (r) {
+      const [d1, d2] = r
+      const hasPeriod = !!(p1 || p2)
+      setDate(d1)
+      start = toHour(Number(h1), p1, !hasPeriod) * 60 + pointMin(m1, half1, mm1)
+      end = dayDiff(d1, d2) * 1440 + toHour(Number(h2), p2, !hasPeriod) * 60 + pointMin(m2, half2, mm2)
+    }
+  } else if ((m = take(new RegExp(`从?(${DW})\\s*${SEP}\\s*(${DW})`)))) {
+    // 周五到周日、9 月 19 日到 21 日：全天、跨好几天
+    const r = rangeOf(m[1], m[2])
+    if (r) {
+      const [d1, d2] = r
+      setDate(d1)
+      allDay = true
+      days = Math.max(0, dayDiff(d1, d2))
+    }
+  } else if ((m = take(/大后天|后天|明天|明日|今天|今日/))) {
     setDate(addDays(today, { 今天: 0, 今日: 0, 明天: 1, 明日: 1, 后天: 2, 大后天: 3 }[m[0]]!))
   } else if ((m = take(/下个?(?:周|星期|礼拜)([一二三四五六日天])/))) {
     const monday = addDays(today, -((dow(today) + 6) % 7) + 7)
@@ -129,7 +226,7 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     const t = fromKey(today)
     let d = `${t.getFullYear()}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`
     if (d < today) d = `${t.getFullYear() + 1}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`
-    if (!Number.isNaN(fromKey(d).getTime())) setDate(d)
+    if (validKey(d)) setDate(d)
   } else if ((m = take(/(?<![\d月])(\d{1,2})[号日](?!\d)/))) {
     const t = fromKey(today)
     let d = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(Number(m[1]))}`
@@ -140,31 +237,44 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     setDate(d)
   }
 
+  // 「明天起」「从周五开始」里的「起 / 开始」不算标题
+  if (dateFound) s = s.replace(/^\s*从?\s*(?:起|开始)(?=\s)/, ' ')
+
   // ---- 时间 ----
-  const PERIOD = '(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|今晚)?'
-  const POINT = '(\\d{1,2})(?:[:：](\\d{2})|点(?:(半)|(\\d{1,2})分?)?)'
-  let start: number | null = null
-  let end: number | null = null
-  const pointMin = (mm?: string, half?: string, mm2?: string): number => Number(mm ?? mm2 ?? (half ? 30 : 0))
-  const range = take(new RegExp(`${PERIOD}\\s*${POINT}\\s*(?:-|–|—|~|～|到|至)\\s*${PERIOD}\\s*${POINT}`))
-  if (range) {
-    const [, p1, h1, m1, half1, mm1, p2, h2, m2, half2, mm2] = range
-    const hasPeriod = !!(p1 || p2)
-    start = toHour(Number(h1), p1, !hasPeriod) * 60 + pointMin(m1, half1, mm1)
-    end = toHour(Number(h2), p2 ?? p1, !hasPeriod) * 60 + pointMin(m2, half2, mm2)
-    if (end <= start && end + 720 > start) end += 720
-    if (p1 === '今晚' && !dateFound) setDate(today)
-  } else {
-    const single = take(new RegExp(`${PERIOD}\\s*${POINT}`))
-    if (single) {
-      const [, p, h, mm, half, mm2] = single
-      start = toHour(Number(h), p, true) * 60 + pointMin(mm, half, mm2)
-      if (p === '今晚' && !dateFound) setDate(today)
+  if (start === null && !allDay) {
+    const range = take(new RegExp(`${PERIOD}\\s*${POINT}\\s*${SEP}\\s*(次日)?\\s*${PERIOD}\\s*${POINT}`))
+    if (range) {
+      const [, p1, h1, m1, half1, mm1, nextDay, p2, h2, m2, half2, mm2] = range
+      const hasPeriod = !!(p1 || p2)
+      start = toHour(Number(h1), p1, !hasPeriod) * 60 + pointMin(m1, half1, mm1)
+      end = toHour(Number(h2), p2 ?? (nextDay ? undefined : p1), !hasPeriod) * 60 + pointMin(m2, half2, mm2)
+      if (nextDay) end += 1440
+      else if (end <= start && end + 720 > start) end += 720
+      // 结束比开始还早：过了午夜，算到第二天
+      if (end <= start) end += 1440
+      if (p1 === '今晚' && !dateFound) setDate(today)
+    } else {
+      const single = take(new RegExp(`${PERIOD}\\s*${POINT}`))
+      if (single) {
+        const [, p, h, mm, half, mm2] = single
+        start = toHour(Number(h), p, true) * 60 + pointMin(mm, half, mm2)
+        if (p === '今晚' && !dateFound) setDate(today)
+      }
     }
   }
-  if (start !== null && (start >= 24 * 60 || (end !== null && end > 24 * 60))) {
+  if (start !== null && (start >= 24 * 60 || (end !== null && (end <= start || end - start > 60 * 1440)))) {
     start = null
     end = null
+  }
+
+  // ---- 全天、连续几天 ----
+  if (start === null) {
+    if (take(/全天|一整天/)) allDay = true
+    const n = take(/(?:连续|持续|为期)?\s*(\d{1,3}|[两二三四五六七八九十])\s*天(?![后前内])/)
+    if (n) {
+      allDay = true
+      days = Math.max(0, (CN_NUM[n[1]] ?? Number(n[1])) - 1)
+    }
   }
 
   // ---- 时长（仅在有具体时间或智能目标时才作为时长使用）----
@@ -183,7 +293,7 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
       duration = Math.round(duration)
     }
   }
-  if (start !== null && end === null) end = Math.min(24 * 60, start + (duration ?? 60))
+  if (start !== null && end === null) end = start + Math.min(60 * 1440, duration ?? 60)
 
   // ---- 组装 ----
   const title = s
@@ -191,8 +301,19 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     .replace(/^[\s，,。、:：]+|[\s，,。、:：]+$/g, '')
     .trim()
 
-  if (dateFound) tokens.push({ kind: 'date', label: repeat.type === 'none' ? relLabel(date, today) : `从${relLabel(date, today)}起` })
-  if (start !== null && end !== null) tokens.push({ kind: 'time', label: `${fromMin(start)}–${fromMin(end)}` })
+  // 结束在开始那天之后的第几天；正好 24:00 结束的仍算当天
+  if (start !== null && end !== null && end > 1440) {
+    days = Math.floor((end - 1) / 1440)
+    end -= days * 1440
+  }
+  if (allDay) {
+    const last = addDays(date, days)
+    tokens.push({ kind: 'date', label: days ? `${relLabel(date, today)} – ${relLabel(last, today)} · ${days + 1} 天` : `${relLabel(date, today)} 全天` })
+  } else if (dateFound) tokens.push({ kind: 'date', label: repeat.type === 'none' ? relLabel(date, today) : `从${relLabel(date, today)}起` })
+  if (start !== null && end !== null) {
+    const endLabel = days === 0 ? fromMin(end) : days === 1 ? `次日 ${fromMin(end)}` : `${relLabel(addDays(date, days), today)} ${fromMin(end)}`
+    tokens.push({ kind: 'time', label: `${fromMin(start)}–${endLabel}` })
+  }
   if (repeatLabel) tokens.push({ kind: 'repeat', label: repeatLabel })
 
   let auto: QuickParsed['auto'] = null
@@ -210,8 +331,10 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
   return {
     title,
     date,
-    start: start === null ? null : fromMin(start),
-    end: end === null ? null : fromMin(end),
+    start: allDay || start === null ? null : fromMin(start),
+    end: allDay || end === null ? null : fromMin(end),
+    allDay,
+    days: start === null && !allDay ? 0 : days,
     repeat,
     auto,
     tokens

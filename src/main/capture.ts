@@ -3,7 +3,7 @@ import { EventEmitter } from 'events'
 import { desktopCapturer, screen, type NativeImage } from 'electron'
 import { promises as fs, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { pad, ruleMatches, ruleWindow, tasksOn, todayKey, toKey } from '@shared/schedule'
+import { occurrencesOn, pad, ruleMatches, ruleWindow, todayKey, toKey } from '@shared/schedule'
 import type { AppData, CaptureResult, CaptureStatus, Settings, Shot, ShotStats } from '@shared/types'
 import { cropRect, dhash, expiredDirs, hamming, isPrivateTitle, pickDisplay, resolveInside, type PhysicalDisplay } from './capture-utils'
 import type { Monitor } from './monitor'
@@ -134,16 +134,15 @@ export class Capturer extends EventEmitter {
   }
 
   private matchingTasks(exe: string, title: string, now: number): string[] {
-    const date = todayKey()
-    return tasksOn(this.ctx.getData().tasks, date)
-      .filter((t) => {
+    return occurrencesOn(this.ctx.getData().tasks, todayKey())
+      .filter(({ task: t, date }) => {
         const rule = t.auto
         if (!rule?.enabled || rule.kind === 'file') return false
         const [from, to] = ruleWindow(t, date)
         if (now < from || now >= to) return false
         return ruleMatches({ ...rule, countIdle: true }, { s: now, e: now, p: exe, t: title })
       })
-      .map((t) => t.id)
+      .map(({ task }) => task.id)
   }
 
   /** 截取包含前台窗口的显示器，按需裁剪到窗口区域 */

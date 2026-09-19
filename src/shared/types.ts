@@ -51,6 +51,10 @@ export interface Task {
   /** HH:mm，为空表示不限时间的待办 */
   start: string | null
   end: string | null
+  /** 全天 / 多天的日程：不看 start、end，从 date 起占满 days + 1 天 */
+  allDay?: boolean
+  /** 跨天：结束在开始那天之后的第几天（0 = 当天结束，1 = 次日结束……） */
+  days?: number
   color: ColorKey
   repeat: Repeat
   auto: AutoRule | null
