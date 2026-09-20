@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, Pencil, Plus } from 'lucide-react'
 import { pad, todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { carriedLabel, floatItems, timedItems, type DayItem } from '../lib/day'
+import { carriedLabel, floatItems, timeLabel, timedItems, type DayItem, type SpanItem } from '../lib/day'
 import { hm, longDur } from '../lib/cal'
 import { paintRibbon, xOf, type Sun } from '../lib/ribbon'
 import { placeBody, runLoop, World } from '../lib/physics'
@@ -86,8 +86,8 @@ interface PopState {
   y: number
 }
 
-export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: number; sun: Sun }): React.JSX.Element {
-  const { items, isToday, nowMin, sun } = props
+export function Ribbon(props: { items: DayItem[]; spans: SpanItem[]; isToday: boolean; nowMin: number; sun: Sun }): React.JSX.Element {
+  const { items, spans, isToday, nowMin, sun } = props
   const look = useStore((s) => s.data.settings.look)
   const cursor = useStore((s) => s.cursor)
   const planning = useStore((s) => s.planning)
@@ -368,18 +368,24 @@ export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: numb
           return (
             <button
               key={i.key}
-              className={cx('blk fx', px < 40 ? 'narrow' : px < 96 && 'compact', i.done && 'done', cur && 'cur', cur && look.ring && 'filling')}
+              className={cx(
+                'blk fx',
+                px < 40 ? 'narrow' : px < 96 && 'compact',
+                i.done && 'done',
+                cur && 'cur',
+                cur && look.ring && 'filling',
+                i.part === 'head' && 'cut-r',
+                i.part === 'tail' && 'cut-l'
+              )}
               style={{ left: `${left * 100}%`, width: `calc(${width * 100}% - 3px)`, ['--p' as string]: `${p}%` }}
               onClick={() => openTask(i.task, i.date)}
-              title={`${i.task.start}–${i.task.end} ${i.task.title}`}
+              title={`${timeLabel(i)} ${i.task.title}`}
             >
               <span className="bt">
                 {look.icons && <TaskIcon name={i.icon} size={13} />}
                 <span>{i.task.title}</span>
               </span>
-              <span className="bm tnum">
-                {i.task.start}–{i.task.end}
-              </span>
+              <span className="bm tnum">{timeLabel(i)}</span>
               {cur && !look.ring && <i className="prog" style={{ width: `${p}%` }} />}
             </button>
           )
@@ -411,6 +417,22 @@ export function Ribbon(props: { items: DayItem[]; isToday: boolean; nowMin: numb
             {f.carried > 0 && <span className="ytag">{carriedLabel(f.carried)}</span>}
           </div>
         ))}
+        {spans.map((s) => {
+          const marks: React.JSX.Element[] = []
+          if (s.startMin !== null)
+            marks.push(
+              <div key={`${s.key}-s`} className="span-mark" style={{ left: `${xOf(s.startMin) * 100}%` }}>
+                <span>{s.task.title} 开始</span>
+              </div>
+            )
+          if (s.endMin !== null)
+            marks.push(
+              <div key={`${s.key}-e`} className="span-mark end" style={{ left: `${xOf(s.endMin) * 100}%` }}>
+                <span>{s.task.title} 结束</span>
+              </div>
+            )
+          return marks
+        })}
         {isToday && <div className="now-mark" style={{ left: `${xOf(nowMin) * 100}%` }} />}
         {floats.length === 0 && timed.length === 0 && <div className="ribbon-empty">这一天还空着</div>}
       </div>

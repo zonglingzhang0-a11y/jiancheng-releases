@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { addDays, fromKey } from '@shared/schedule'
 import type { AppData, AutoProgress, CardSize, ImportedFont, LookSettings } from '@shared/types'
-import { dayItems, dayRatio, floatItems, timedItems, type DayItem } from '../lib/day'
+import { dayItems, dayRatio, floatItems, startLabel, timeLabel, timedItems, type DayItem } from '../lib/day'
 import { hm, longDur, lunar, shortDur, sunOf, termLabel } from '../lib/cal'
 import { linearGradient, ribbonGradient, xOf } from '../lib/ribbon'
 import { placeBody, runLoop, World } from '../lib/physics'
@@ -184,14 +184,14 @@ export function DeskCard(props: Props): React.JSX.Element {
   let ringT = '—'
   let ringL = '空闲'
   if (cur) {
-    ringP = (m - cur.start!) / (cur.end! - cur.start!)
-    ringT = shortDur(cur.end! - m)
+    ringP = (m - cur.from) / (cur.to - cur.from)
+    ringT = shortDur(cur.to - m)
     ringL = '剩余'
   } else if (next) {
     ringT = shortDur(next.start! - m)
     ringL = '后开始'
   }
-  const label = cur ? `正在 · ${cur.task.start}–${cur.task.end}` : next ? `下一项 · ${next.task.start}` : '接下来'
+  const label = cur ? `正在 · ${timeLabel(cur)}` : next ? `下一项 · ${startLabel(next)}` : '接下来'
   const title = head ? (
     <b className="wg-title">
       {look.icons && <TaskIcon name={head.icon} size={15} />}
@@ -336,7 +336,7 @@ export function DeskCard(props: Props): React.JSX.Element {
         </div>
         <div className="ws-clock tnum">{hm(m)}</div>
         <div className="ws-now">
-          <span className="wg-cap">{cur ? `正在 · 还剩 ${longDur(cur.end! - m)}` : next ? `下一项 · ${next.task.start} · ${longDur(next.start! - m)}后` : '接下来'}</span>
+          <span className="wg-cap">{cur ? `正在 · 还剩 ${longDur(cur.to - m)}` : next ? `下一项 · ${startLabel(next)} · ${longDur(next.start! - m)}后` : '接下来'}</span>
           <div className="row">
             {title}
             {doneBtn}

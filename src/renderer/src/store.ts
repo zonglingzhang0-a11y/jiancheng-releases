@@ -41,6 +41,8 @@ interface Store {
   drawer: 'week' | 'month' | null
   /** 早晨规划：色带里显示可以拖进去的空位 */
   planning: boolean
+  /** 鼠标停在某条长期事上时，周 / 月视图里高亮它覆盖的那几天 */
+  hotSpan: string | null
   editor: EditorState | null
   settingsOpen: boolean
   settingsTab: SettingsTab
@@ -67,6 +69,7 @@ interface Store {
   setCursor(date: string): void
   setDrawer(drawer: 'week' | 'month' | null): void
   setPlanning(on: boolean): void
+  setHotSpan(key: string | null): void
   focusQuick(): void
   openViewer(shots: Shot[], index: number): void
   closeViewer(): void
@@ -141,6 +144,7 @@ export const useStore = create<Store>((set, get) => ({
   cursor: todayKey(),
   drawer: null,
   planning: false,
+  hotSpan: null,
   editor: null,
   settingsOpen: false,
   settingsTab: 'general',
@@ -240,6 +244,10 @@ export const useStore = create<Store>((set, get) => ({
 
   setDrawer(drawer) {
     set({ drawer })
+  },
+
+  setHotSpan(hotSpan) {
+    if (get().hotSpan !== hotSpan) set({ hotSpan })
   },
 
   setPlanning(planning) {

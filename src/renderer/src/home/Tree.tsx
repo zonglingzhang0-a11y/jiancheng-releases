@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, CircleDashed, Moon, Sun, Sunrise, Sunset, Zap, type LucideIcon } from 'lucide-react'
+import { ChevronRight, CircleDashed, Hourglass, Moon, Sun, Sunrise, Sunset, Zap, type LucideIcon } from 'lucide-react'
 import { todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { carriedLabel, type DayItem } from '../lib/day'
+import { carriedLabel, crossTag, startLabel, type DayItem, type SpanItem } from '../lib/day'
 import { TaskIcon } from '../lib/icons'
 import { burstAt } from '../lib/fx'
 import { cx } from '../components/ui'
@@ -37,7 +37,7 @@ function loadOpen(): Set<string> {
   } catch {
     /* 读不到就用默认 */
   }
-  return new Set(['dawn', 'day', 'dusk', 'night', 'any'])
+  return new Set(['dawn', 'day', 'dusk', 'night', 'any', 'span'])
 }
 
 export function Check(props: { on: boolean; small?: boolean; onToggle: (e: React.MouseEvent) => void; label?: string }): React.JSX.Element {
@@ -86,10 +86,11 @@ function Item({ item, open, onOpen }: { item: DayItem; open: boolean; onOpen: ()
             toggle(item.task.id, item.date)
           }}
         />
-        {item.task.start && <span className="time tnum">{item.task.start}</span>}
+        {item.start !== null && <span className="time tnum">{startLabel(item)}</span>}
         {icons && <TaskIcon name={item.icon} size={14} className="ico" />}
         <span className="ttl">{item.task.title}</span>
         {item.carried > 0 && <span className="tag-y">{carriedLabel(item.carried)}</span>}
+        {crossTag(item) && <span className="tag-y soft">{crossTag(item)}</span>}
         {auto && !item.done && (
           <span className="auto-mark tnum" title={p ? p.detail : '智能完成'}>
             <Zap size={11} strokeWidth={2.4} />
@@ -129,7 +130,47 @@ function Item({ item, open, onOpen }: { item: DayItem; open: boolean; onOpen: ()
   )
 }
 
-export function Tree({ items }: { items: DayItem[] }): React.JSX.Element {
+/** 长期事：一根进度条 + 还剩几天；鼠标停上去，周 / 月视图里那几天会亮起来 */
+function SpanRow({ item }: { item: SpanItem }): React.JSX.Element {
+  const toggle = useStore((s) => s.toggle)
+  const openTask = useStore((s) => s.openTask)
+  const setHotSpan = useStore((s) => s.setHotSpan)
+  const icons = useStore((s) => s.data.settings.look.icons)
+  return (
+    <div
+      className={cx('lng', item.done && 'done')}
+      role="button"
+      tabIndex={0}
+      onMouseEnter={() => setHotSpan(item.key)}
+      onMouseLeave={() => setHotSpan(null)}
+      onFocus={() => setHotSpan(item.key)}
+      onBlur={() => setHotSpan(null)}
+      onClick={() => openTask(item.task, item.date)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') openTask(item.task, item.date)
+      }}
+    >
+      <Check
+        on={item.done}
+        onToggle={(e) => {
+          if (!item.done) burstAt(e)
+          toggle(item.task.id, item.date)
+        }}
+      />
+      {icons && <TaskIcon name={item.icon} size={14} className="ico" />}
+      <span className="ttl">{item.task.title}</span>
+      <span className="lng-left">{item.label}</span>
+      <span className="lng-bar">
+        <i style={{ width: `${Math.round(item.ratio * 100)}%` }} />
+      </span>
+      <span className="lng-day tnum">
+        {item.dayNo} / {item.totalDays} 天
+      </span>
+    </div>
+  )
+}
+
+export function Tree({ items, spans }: { items: DayItem[]; spans: SpanItem[] }): React.JSX.Element {
   const cursor = useStore((s) => s.cursor)
   const [open, setOpen] = useState(loadOpen)
   const [openItems, setOpenItems] = useState<Set<string>>(new Set())
@@ -156,16 +197,17 @@ export function Tree({ items }: { items: DayItem[] }): React.JSX.Element {
     }
   }
 
-  const done = items.filter((i) => i.done).length
+  const counted = items.filter((i) => i.part !== 'tail')
+  const done = counted.filter((i) => i.done).length
   return (
     <aside className="tree" aria-label="当天的日程">
       <div className="tree-head">
         <span>{cursor === todayKey() ? '今天的安排' : '这一天的安排'}</span>
         <span className="tnum">
-          {done} / {items.length}
+          {done} / {counted.length}
         </span>
       </div>
-      {items.length === 0 && <div className="tree-empty">在上面的输入框里写一句话，或点「新建」</div>}
+      {items.length === 0 && spans.length === 0 && <div className="tree-empty">在上面的输入框里写一句话，或点「新建」</div>}
       {FOLDERS.map((f) => {
         const list = groups.get(f.id)
         if (!list?.length) return null
@@ -201,6 +243,25 @@ export function Tree({ items }: { items: DayItem[] }): React.JSX.Element {
           </div>
         )
       })}
+      {spans.length > 0 && (
+        <div className={cx('fold span-fold', open.has('span') && 'open')}>
+          <button className="fold-row fx" onClick={() => flip('span')} aria-expanded={open.has('span')}>
+            <ChevronRight size={14} className="chev" />
+            <Hourglass size={14} className="fico" />
+            <span className="fold-name">长期</span>
+            <span className="fold-count tnum">
+              {spans.filter((s) => s.done).length}/{spans.length}
+            </span>
+          </button>
+          <div className="fold-body">
+            <div>
+              {spans.map((s) => (
+                <SpanRow key={s.key} item={s} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

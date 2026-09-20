@@ -210,12 +210,21 @@ function sampleTasks(): Task[] {
     mk({ title: '买咖啡豆', date: today }),
     mk({ title: '给家里打电话', date: today }),
     mk({ title: '取快递', date: today, icon: 'Package' }),
+    // 跨午夜的每日日程：色带上分成两段，不进「长期」
+    mk({ title: '睡觉', start: '23:00', end: '07:00', days: 1, icon: 'Moon', color: 'slate', repeat: { type: 'daily', weekdays: [], until: null } }),
+    // 跨天的长期事：一周以内画大框，一周以上合并成虚线
+    mk({ title: '出差 · 杭州', date: addDays(today, -1), allDay: true, days: 2, icon: 'Plane' }),
+    mk({ title: '考试周', date: addDays(today, -5), allDay: true, days: 11 }),
+    mk({ title: '健身打卡 21 天', date: addDays(today, -12), allDay: true, days: 20 }),
+    mk({ title: '装修', date: addDays(today, -19), allDay: true, days: 29 }),
+    mk({ title: '读完《认知设计》', date: addDays(today, -10), allDay: true, days: 30 }),
+    mk({ title: '国庆假期', date: addDays(today, 11), allDay: true, days: 6 }),
     mk({ title: '回复设计稿意见', date: addDays(today, -1), icon: 'PenTool' })
   ]
 }
 
 export function createMockApi(): Api {
-  const STORAGE = 'jc.mock.data.v2'
+  const STORAGE = 'jc.mock.data.v3'
   let data: AppData
   try {
     data = JSON.parse(localStorage.getItem(STORAGE) ?? '') as AppData

@@ -1,13 +1,64 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { addDays, fromKey, todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { dayItems, dayRatio, timedItems } from '../lib/day'
+import { dayItems, dayRatio, spansIn, timedItems, type SpanRange } from '../lib/day'
 import { sunOf } from '../lib/cal'
 import { linearGradient, ribbonGradient, xOf } from '../lib/ribbon'
 import { monthMatrix, sameMonth, WEEKDAY_SHORT, weekDates } from '../lib/dates'
 import { cx } from '../components/ui'
 
 const CN_MONTH = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二']
+
+/**
+ * 跨天的事：一周以内的画大框（最多三行），一周以上的合并成一根虚线，
+ * 深浅表示那天有几件在进行；鼠标停在清单里某条长期事上时，它盖住的那几天会亮起来
+ */
+function SpanRows({ dates, spans }: { dates: string[]; spans: SpanRange[] }): React.JSX.Element | null {
+  const hot = useStore((s) => s.hotSpan)
+  const setHotSpan = useStore((s) => s.setHotSpan)
+  const first = dates[0]
+  const last = dates[dates.length - 1]
+  const inRow = spans.filter((s) => s.e >= first && s.s <= last)
+  const short = inRow.filter((s) => s.totalDays <= 7)
+  const long = inRow.filter((s) => s.totalDays > 7)
+  const shown = short.slice(0, 3)
+  const more = short.length - shown.length
+  const counts = dates.map((d) => long.filter((s) => d >= s.s && d <= s.e).length)
+  const hotDays = (d: string): boolean => {
+    const s = inRow.find((x) => x.key === hot)
+    return !!s && d >= s.s && d <= s.e
+  }
+  if (!shown.length && !counts.some((c) => c)) return null
+  return (
+    <div className="spanrows">
+      {shown.map((s) => {
+        const a = Math.max(0, dates.indexOf(s.s))
+        const z = s.e > last ? dates.length - 1 : dates.indexOf(s.e)
+        return (
+          <div key={s.key} className="spanrow">
+            <span
+              className={cx('spanbox', s.s < first && 'cut-l', s.e > last && 'cut-r', s.done && 'done', hot === s.key && 'hot')}
+              style={{ gridColumn: `${a + 1} / span ${Math.max(1, z - a + 1)}` }}
+              onMouseEnter={() => setHotSpan(s.key)}
+              onMouseLeave={() => setHotSpan(null)}
+              title={`${s.task.title} · ${s.totalDays} 天`}
+            >
+              {s.task.title}
+            </span>
+          </div>
+        )
+      })}
+      {more > 0 && <div className="spanmore tnum">还有 {more} 项</div>}
+      {counts.some((c) => c > 0) && (
+        <div className="spanline" title={long.map((s) => s.task.title).join('、')}>
+          {counts.map((c, i) => (
+            <i key={dates[i]} className={cx(`lv${Math.min(4, c)}`, hotDays(dates[i]) && 'hot')} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function DayRing(props: { r: number | null; size?: number }): React.JSX.Element {
   const C = 2 * Math.PI * 9
@@ -138,10 +189,13 @@ function WeekDrawer(props: { weekStart: number; night: number }): React.JSX.Elem
   const setCursor = useStore((s) => s.setCursor)
   const today = todayKey()
   const dates = weekDates(cursor, props.weekStart)
-  const grad = useMemo(() => linearGradient('180deg', 360, 1440, 16, sunOf(today), props.night), [today, props.night])
-  // 竖向从 6 点画到 24 点
-  const y = (m: number): number => Math.max(0, (m - 360) / 1080)
+  const spans = useMemo(() => spansIn(data, dates[0], dates[6]), [data, dates])
+  const grad = useMemo(() => linearGradient('180deg', 0, 1440, 16, sunOf(today), props.night), [today, props.night])
+  // 竖向画满一整天，用和色带一样的压缩刻度：夜里压窄、白天展开；
+  // 跨午夜的日程在前一天底部和第二天顶部各占一段
+  const y = (m: number): number => xOf(m)
   return (
+    <>
     <div className="week">
       {dates.map((d) => {
         const items = timedItems(dayItems(data, progress, d))
@@ -154,7 +208,12 @@ function WeekDrawer(props: { weekStart: number; night: number }): React.JSX.Elem
             </span>
             <span className="wbar" style={{ background: grad }}>
               {items.map((i) => (
-                <i key={i.key} title={`${i.task.start} ${i.task.title}`} style={{ top: `${y(i.start!) * 100}%`, height: `${Math.max(3, (y(i.end!) - y(i.start!)) * 100)}%`, opacity: i.done ? 0.4 : 1 }} />
+                <i
+                  key={i.key}
+                  className={cx(i.part !== 'whole' && 'cross')}
+                  title={i.task.title}
+                  style={{ top: `${y(i.start!) * 100}%`, height: `${Math.max(2.5, (y(i.end!) - y(i.start!)) * 100)}%`, opacity: i.done ? 0.4 : 1 }}
+                />
               ))}
             </span>
             <span className="wn tnum">{items.length ? `${items.length} 个日程` : ' '}</span>
@@ -162,6 +221,8 @@ function WeekDrawer(props: { weekStart: number; night: number }): React.JSX.Elem
         )
       })}
     </div>
+    <SpanRows dates={dates} spans={spans} />
+    </>
   )
 }
 
@@ -172,25 +233,36 @@ function MonthDrawer(props: { weekStart: number }): React.JSX.Element {
   const setCursor = useStore((s) => s.setCursor)
   const today = todayKey()
   const cells = monthMatrix(cursor, props.weekStart)
+  const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, i) => cells.slice(i * 7, i * 7 + 7))
+  const spans = useMemo(() => spansIn(data, cells[0], cells[cells.length - 1]), [data, cells])
   const heads = Array.from({ length: 7 }, (_, i) => WEEKDAY_SHORT[(i + props.weekStart) % 7])
   return (
-    <div className="mgrid">
-      {heads.map((h) => (
-        <div key={h} className="mh">
-          {h}
+    <div className="mwrap">
+      <div className="mgrid">
+        {heads.map((h) => (
+          <div key={h} className="mh">
+            {h}
+          </div>
+        ))}
+      </div>
+      {weeks.map((row) => (
+        <div key={row[0]} className="mweek">
+          <div className="mgrid">
+            {row.map((d) => {
+              const inMonth = sameMonth(d, cursor)
+              const n = inMonth ? dayItems(data, progress, d).filter((i) => i.part !== 'tail').length : 0
+              return (
+                <button key={d} className={cx('md fx', !inMonth && 'out', d === today && 'today', d === cursor && 'sel')} onClick={() => setCursor(d)} disabled={!inMonth}>
+                  {inMonth && <DayRing r={dayRatio(data, progress, d)} size={18} />}
+                  <span className="tnum">{fromKey(d).getDate()}</span>
+                  {n > 0 && <em className="tnum">{n}</em>}
+                </button>
+              )
+            })}
+          </div>
+          <SpanRows dates={row} spans={spans} />
         </div>
       ))}
-      {cells.map((d) => {
-        const inMonth = sameMonth(d, cursor)
-        const n = inMonth ? dayItems(data, progress, d).length : 0
-        return (
-          <button key={d} className={cx('md fx', !inMonth && 'out', d === today && 'today', d === cursor && 'sel')} onClick={() => setCursor(d)} disabled={!inMonth}>
-            {inMonth && <DayRing r={dayRatio(data, progress, d)} size={18} />}
-            <span className="tnum">{fromKey(d).getDate()}</span>
-            {n > 0 && <em className="tnum">{n}</em>}
-          </button>
-        )
-      })}
     </div>
   )
 }

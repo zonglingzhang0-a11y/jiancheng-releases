@@ -5,7 +5,7 @@ import { fromKey } from '@shared/schedule'
 import { api } from '../lib/api'
 import { WEEKDAY } from '../lib/dates'
 import { useStore } from '../store'
-import { carriedLabel, dayItems, floatItems, timedItems, type DayItem } from '../lib/day'
+import { carriedLabel, dayItems, floatItems, startLabel, timedItems, type DayItem } from '../lib/day'
 import { useNowMin } from '../lib/clock'
 import { longDur, lunar } from '../lib/cal'
 import { TaskIcon } from '../lib/icons'
@@ -122,7 +122,7 @@ export function PanelApp(): React.JSX.Element {
             </div>
             {(cur || next) && (
               <div className="pl-now">
-                <span className="pl-now-l">{cur ? `正在 · 还剩 ${longDur(cur.end! - min)}` : `下一项 · ${next!.task.start} · ${longDur(next!.start! - min)}后`}</span>
+                <span className="pl-now-l">{cur ? `正在 · 还剩 ${longDur(cur.to - min)}` : `下一项 · ${startLabel(next!)} · ${longDur(next!.start! - min)}后`}</span>
                 <b>{(cur ?? next)!.task.title}</b>
               </div>
             )}

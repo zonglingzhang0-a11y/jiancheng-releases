@@ -1430,6 +1430,13 @@
   border-radius: 3px;
   background: rgba(23, 24, 27, 0.3);
 }
+/* 跨午夜的那一段（多半是睡觉）：淡斜纹，只表示「这段时间被占着」 */
+.wbar i.cross {
+  left: 0;
+  right: 0;
+  border-radius: 0;
+  background: repeating-linear-gradient(135deg, rgba(23, 24, 27, 0.13) 0 3px, rgba(23, 24, 27, 0.05) 3px 6px);
+}
 .wn {
   font-size: 11px;
   color: var(--ink-3);
@@ -3007,4 +3014,194 @@ html.route-panel body {
   .look-split .pv {
     margin: 0 16px 16px;
   }
+}
+
+/* 清单最下面的「长期」一组：固定在底部，上面的内容照常滚动 */
+.span-fold .fold-body > div {
+  max-height: 136px;
+  overflow: auto;
+}
+.fold.span-fold {
+  position: sticky;
+  bottom: -10px;
+  z-index: 2;
+  margin: 6px -8px -10px;
+  padding: 0 8px 6px;
+  background: var(--panel-solid);
+  box-shadow: inset 0 1px 0 var(--hair), 0 -10px 16px -12px rgba(23, 24, 27, 0.35);
+}
+/* 清单最下面的「长期」一组 */
+.lng {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 8px;
+  margin-left: 15px;
+  padding: 6px 8px 8px 10px;
+  border-left: 1px solid var(--hair-2);
+  border-radius: 0 10px 10px 0;
+  cursor: pointer;
+  transition: background 0.16s;
+}
+.lng:hover,
+.lng:focus-visible {
+  background: var(--soft);
+  outline: none;
+}
+.lng .ttl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lng-left {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.lng-bar {
+  grid-column: 2 / 4;
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--hair-2);
+  overflow: hidden;
+}
+.lng-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--ink);
+}
+.lng-day {
+  grid-column: 4;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.lng.done .ttl {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.lng.done .lng-bar i {
+  background: var(--ink-3);
+}
+.tag-y.soft {
+  background: var(--soft);
+  color: var(--ink-2);
+}
+
+/* 跨午夜的日程块：午夜那一侧是平的 */
+.blk.cut-r {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+.blk.cut-l {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+}
+
+/* 长期事在色带上只留首尾两面小旗 */
+.span-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  border-left: 1px dashed rgba(23, 24, 27, 0.35);
+  pointer-events: none;
+}
+.span-mark span {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  padding: 1px 6px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.7);
+}
+.span-mark.end span {
+  left: auto;
+  right: 3px;
+}
+
+/* 周 / 月视图里的跨天行 */
+.spanrows {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+}
+.spanrow,
+.spanline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--span-gap, 8px);
+}
+.spanbox {
+  height: 16px;
+  padding: 0 7px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  color: #fff;
+  background: var(--ink);
+  transition: box-shadow 0.15s;
+}
+.spanbox.cut-l {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
+.spanbox.cut-r {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+.spanbox.done {
+  background: var(--ink-3);
+  text-decoration: line-through;
+}
+.spanbox.hot {
+  box-shadow: 0 0 0 2px var(--ink-4);
+}
+.spanline {
+  height: 5px;
+}
+.spanline i {
+  border-radius: 2px;
+}
+.spanline i.lv1 {
+  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.18) 0 5px, transparent 5px 8px);
+}
+.spanline i.lv2 {
+  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.34) 0 5px, transparent 5px 8px);
+}
+.spanline i.lv3 {
+  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.52) 0 5px, transparent 5px 8px);
+}
+.spanline i.lv4 {
+  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.72) 0 5px, transparent 5px 8px);
+}
+.spanline i.hot {
+  background: var(--ink);
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 2px;
+}
+.spanmore {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.mwrap {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+.mweek {
+  display: grid;
+  gap: 0;
+  --span-gap: 6px;
+}
+.mwrap .mgrid {
+  padding-top: 0;
 }

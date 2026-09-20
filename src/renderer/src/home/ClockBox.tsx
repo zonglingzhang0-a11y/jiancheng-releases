@@ -3,7 +3,7 @@ import { Zap } from 'lucide-react'
 import { fromKey, pad, todayKey } from '@shared/schedule'
 import type { ClockStyle } from '@shared/types'
 import { useStore } from '../store'
-import { floatItems, timedItems, type DayItem } from '../lib/day'
+import { floatItems, startLabel, timeLabel, timedItems, type DayItem } from '../lib/day'
 import { useNowSec } from '../lib/clock'
 import { hm, longDur } from '../lib/cal'
 import { TaskIcon } from '../lib/icons'
@@ -146,14 +146,15 @@ export function ClockBox(props: { items: DayItem[]; isToday: boolean }): React.J
       </div>
     )
   } else if (cur) {
-    const left = cur.end! * 60 - sec
-    const total = (cur.end! - cur.start!) * 60
+    // 跨午夜的算到次日的结束时间
+    const left = cur.to * 60 - sec
+    const total = (cur.to - cur.from) * 60
     const p = cur.progress
     now = (
       <div className="now">
         <div className="now-label">
           <i className="dot" />
-          正在 · {cur.task.start}–{cur.task.end}
+          正在 · {timeLabel(cur)}
         </div>
         <div className="now-title">
           {look.icons && <TaskIcon name={cur.icon} size={22} />}
@@ -199,7 +200,7 @@ export function ClockBox(props: { items: DayItem[]; isToday: boolean }): React.J
     const until = next.start! - m
     now = (
       <div className="now">
-        <div className="now-label">下一项 · {next.task.start}</div>
+        <div className="now-label">下一项 · {startLabel(next)}</div>
         <div className="now-title">
           {look.icons && <TaskIcon name={next.icon} size={22} />}
           <span>{next.task.title}</span>

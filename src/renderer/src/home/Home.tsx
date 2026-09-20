@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { fromKey, todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { dayItems } from '../lib/day'
+import { dayItems, spanItems } from '../lib/day'
 import { lunar, sunOf, termLabel } from '../lib/cal'
 import { useNowMin } from '../lib/clock'
 import { WEEKDAY } from '../lib/dates'
@@ -73,14 +73,15 @@ export function Home(): React.JSX.Element {
   const { min, today } = useNowMin()
   const isToday = cursor === today
   const items = useMemo(() => dayItems(data, progress, cursor), [data, progress, cursor])
+  const spans = useMemo(() => spanItems(data, progress, cursor), [data, progress, cursor])
   const sun = useMemo(() => sunOf(cursor), [cursor])
 
   return (
     <div className="home">
       <HomeTop isToday={isToday} />
       <ClockBox items={items} isToday={isToday} />
-      <Tree items={items} />
-      <Ribbon items={items} isToday={isToday} nowMin={min} sun={sun} />
+      <Tree items={items} spans={spans} />
+      <Ribbon items={items} spans={spans} isToday={isToday} nowMin={min} sun={sun} />
       <Ticker />
     </div>
   )
