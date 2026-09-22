@@ -1,0 +1,21 @@
+{
+  "name": "jiancheng-video",
+  "private": true,
+  "version": "0.1.0",
+  "description": "简程介绍视频：Remotion 动画段、演示脚本与字幕",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts",
+    "still": "remotion still src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.526",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.526"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

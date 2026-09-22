@@ -4,3 +4,4 @@ release/
 *.log
 backup/
 .claude/settings.local.json
+video/out/
