@@ -1707,6 +1707,24 @@
   color: #fff;
   box-shadow: none;
 }
+/* 编辑栏里的「开始 / 结束」两行 */
+.when {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.when-k {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.when-dur {
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
 .time-range {
   display: inline-flex;
   align-items: center;

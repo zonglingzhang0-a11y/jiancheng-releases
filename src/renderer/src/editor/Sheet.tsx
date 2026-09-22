@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { Maximize2, Minimize2, Plus, X, Zap } from 'lucide-react'
-import { fromKey, fromMin, tasksOn, toMin, uid } from '@shared/schedule'
+import { addDays, fromKey, fromMin, tasksOn, toMin, uid } from '@shared/schedule'
 import type { RepeatType, Task } from '@shared/types'
 import { defaultRule, useStore, type EditorState } from '../store'
-import { WEEKDAY, WEEKDAY_SHORT } from '../lib/dates'
+import { durationLabel, WEEKDAY, WEEKDAY_SHORT } from '../lib/dates'
 import { guessIcon, iconOf, TASK_ICONS, TaskIcon } from '../lib/icons'
 import { burstAt } from '../lib/fx'
 import { DatePicker, TimeSelect } from '../components/Pickers'
@@ -56,8 +56,28 @@ function IconPicker(props: { task: Task; onChange: (icon: string | null) => void
   )
 }
 
+type TimeMode = 'any' | 'timed' | 'allday'
+
+const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
+
+/** 从开始到结束一共多少分钟（定时间的日程） */
+const spanMinutes = (task: Task): number => (task.days ?? 0) * 1440 + toMin(task.end!) - toMin(task.start!)
+
+/** 时长的说法：跨午夜的标出来，超过一天的按「N 天 N 小时」 */
+function spanLabel(task: Task): string {
+  if (task.allDay) return `共 ${(task.days ?? 0) + 1} 天`
+  if (!task.start || !task.end) return ''
+  const total = spanMinutes(task)
+  if (total < 1440) return (task.days ?? 0) > 0 ? `${durationLabel(total)} · 跨过午夜` : durationLabel(total)
+  const d = Math.floor(total / 1440)
+  const rest = total % 1440
+  return rest ? `${d} 天 ${durationLabel(rest)}` : `${d} 天`
+}
+
 const partOfDay = (task: Task): string => {
+  if (task.allDay) return (task.days ?? 0) > 0 ? '多天' : '全天'
   if (!task.start) return '随时'
+  if (task.end && spanMinutes(task) >= 1440) return '多天'
   const m = toMin(task.start)
   if (m < 300 || m >= 1200) return '夜'
   if (m < 660) return '晨'
@@ -140,7 +160,7 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
       }
     }
     let auto = task.auto
-    if (auto && auto.scope === 'slot' && !(task.start && task.end)) auto = { ...auto, scope: 'day' }
+    if (auto && auto.scope === 'slot' && (task.allDay || !(task.start && task.end))) auto = { ...auto, scope: 'day' }
     const pending = newSub.trim() ? [...(task.subtasks ?? []), { id: uid(), title: newSub.trim(), doneOn: [] }] : task.subtasks
     const next = { ...task, title: task.title.trim(), auto, subtasks: pending, updatedAt: Date.now() }
     saveTask(next)
@@ -159,17 +179,35 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const timed = !!task.start
-  const setTimed = (on: boolean): void => {
-    if (on) {
+  const mode: TimeMode = task.allDay ? 'allday' : task.start ? 'timed' : 'any'
+  const days = task.days ?? 0
+  const endDate = addDays(task.date, days)
+  const setMode = (m: TimeMode): void => {
+    if (m === 'any') set({ start: null, end: null, allDay: false, days: 0 })
+    else if (m === 'allday') set({ start: null, end: null, allDay: true, days: task.allDay ? days : 0 })
+    else {
       const now = new Date()
       const start = Math.min(22 * 60, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30)
-      set({ start: fromMin(start), end: fromMin(start + 60) })
-    } else set({ start: null, end: null })
+      set({ start: fromMin(start), end: fromMin(start + 60), allDay: false, days: 0 })
+    }
   }
+  /** 改开始时间：时长不变，结束跟着挪（可能挪到次日） */
   const setStart = (start: string): void => {
-    const dur = task.start && task.end ? toMin(task.end) - toMin(task.start) : 60
-    set({ start, end: fromMin(Math.min(24 * 60, toMin(start) + Math.max(15, dur))) })
+    const dur = task.start && task.end ? spanMinutes(task) : 60
+    const endAbs = toMin(start) + Math.max(15, dur)
+    const d = Math.max(0, Math.floor((endAbs - 1) / 1440))
+    set({ start, end: fromMin(endAbs - d * 1440), days: d })
+  }
+  /** 结束时间列表从开始时间往后排到次日同一时刻；超过一天的用结束日期来选 */
+  const overnight = mode === 'timed' && (days === 0 || (days === 1 && toMin(task.end!) <= toMin(task.start!)))
+  const setEnd = (end: string, nextDay: boolean): void => {
+    set(overnight ? { end, days: nextDay ? 1 : 0 } : { end })
+  }
+  const setEndDate = (d: string): void => {
+    const n = Math.max(0, dayDiff(task.date, d))
+    if (mode === 'timed' && n === 0 && toMin(task.end!) <= toMin(task.start!)) {
+      set({ days: 0, end: fromMin(Math.min(1440, toMin(task.start!) + 60)) })
+    } else set({ days: n })
   }
   const repeatType = task.repeat.type
   const setRepeat = (type: RepeatType): void => {
@@ -235,25 +273,51 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
           <div className="field">
             <label>时间</label>
             <div className="fline">
-              <DatePicker value={task.date} onChange={(date) => set({ date })} weekStart={weekStart} prefix={repeatType !== 'none' ? '起始' : undefined} />
-              <Segmented<'any' | 'timed'>
+              <Segmented<TimeMode>
                 size="sm"
-                value={timed ? 'timed' : 'any'}
-                onChange={(v) => setTimed(v === 'timed')}
+                value={mode}
+                onChange={setMode}
                 options={[
                   { value: 'any', label: '随时' },
-                  { value: 'timed', label: '定时间' }
+                  { value: 'timed', label: '定时间' },
+                  { value: 'allday', label: '全天 / 多天' }
                 ]}
               />
-              {timed && (
-                <span className="time-range">
-                  <TimeSelect value={task.start!} onChange={setStart} />
-                  <span className="time-sep">–</span>
-                  <TimeSelect value={task.end!} after={task.start!} onChange={(end) => set({ end })} />
-                </span>
-              )}
+              {mode === 'any' && <DatePicker value={task.date} onChange={(date) => set({ date })} weekStart={weekStart} prefix={repeatType !== 'none' ? '起始' : undefined} />}
             </div>
-            {!timed && <div className="field-hint">没定时间的待办会漂在色带里，随时可以拖进空档</div>}
+            {mode !== 'any' && (
+              <div className="when">
+                <span className="when-k">开始</span>
+                <div className="fline">
+                  <DatePicker value={task.date} onChange={(date) => set({ date })} weekStart={weekStart} prefix={repeatType !== 'none' ? '起始' : undefined} />
+                  {mode === 'timed' && <TimeSelect value={task.start!} onChange={(v) => setStart(v)} />}
+                </div>
+                <span className="when-k">结束</span>
+                <div className="fline">
+                  {repeatType === 'none' ? (
+                    <DatePicker value={endDate} min={task.date} onChange={setEndDate} weekStart={weekStart} />
+                  ) : (
+                    // 重复的日程：结束说成「当天 / 次日 / 第 N 天」，不说具体日期，免得看起来像重复到那天为止
+                    <Select<number>
+                      value={days}
+                      onChange={(n) => setEndDate(addDays(task.date, n))}
+                      width={132}
+                      options={Array.from({ length: 7 }, (_, n) => ({ value: n, label: n === 0 ? '当天' : n === 1 ? '次日' : `第 ${n + 1} 天` }))}
+                    />
+                  )}
+                  {mode === 'timed' && (
+                    <TimeSelect value={task.end!} after={overnight ? task.start! : undefined} overnight={overnight} valueNextDay={overnight && days === 1} onChange={setEnd} />
+                  )}
+                </div>
+                <span />
+                <span className="when-dur tnum">{spanLabel(task)}</span>
+              </div>
+            )}
+            {mode === 'any' && <div className="field-hint">没定时间的待办会漂在色带里，随时可以拖进空档</div>}
+            {mode === 'timed' && days > 0 && spanMinutes(task) < 1440 && <div className="field-hint">跨过午夜：色带上会分成两段，前一天晚上和第二天早上各一段</div>}
+            {(mode === 'allday' || (mode === 'timed' && spanMinutes(task) >= 1440)) && (
+              <div className="field-hint">跨一整天以上的事不占色带，放在右边清单最下面的「长期」里，周 / 月视图里能看到它的范围</div>
+            )}
           </div>
 
           <div className="field">

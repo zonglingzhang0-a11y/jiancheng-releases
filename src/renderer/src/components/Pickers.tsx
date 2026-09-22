@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, ChevronDown } from 'lucide-react'
 import { fromMin, toMin } from '@shared/schedule'
 import { dayTitle, durationLabel, relativeLabel, WEEKDAY, weekdayOf } from '../lib/dates'
@@ -26,22 +26,29 @@ export function parseTime(input: string): string | null {
 
 export function TimeSelect(props: {
   value: string
-  onChange: (v: string) => void
+  /** 选中的选项；nextDay 表示选的是「次日」的时间 */
+  onChange: (v: string, nextDay: boolean) => void
   /** 作为结束时间时传入开始时间，用于显示时长并限制选项 */
   after?: string
+  /** 结束时间可以一直选到次日同一时刻（跨过午夜） */
+  overnight?: boolean
+  /** 当前结束时间是否在次日，用来高亮正确的那一项 */
+  valueNextDay?: boolean
   disabled?: boolean
 }): React.JSX.Element {
   const a = useAnchor()
   const listRef = useRef<HTMLDivElement>(null)
   const [text, setText] = useState('')
 
+  // 选项的分钟数可以超过 1440，表示次日
   const options = useMemo(() => {
-    const list: string[] = []
+    const list: number[] = []
     const from = props.after ? toMin(props.after) + 15 : 0
-    const to = props.after ? 24 * 60 : 24 * 60 - 15
-    for (let m = from; m <= to; m += 15) list.push(fromMin(m))
+    const to = props.after ? (props.overnight ? toMin(props.after) + 24 * 60 : 24 * 60) : 24 * 60 - 15
+    for (let m = from; m <= to; m += 15) list.push(m)
     return list
-  }, [props.after])
+  }, [props.after, props.overnight])
+  const current = toMin(props.value) + (props.valueNextDay ? 1440 : 0)
 
   useEffect(() => {
     if (!a.open) return
@@ -52,11 +59,23 @@ export function TimeSelect(props: {
     })
   }, [a.open])
 
-  const commit = (v: string | null): void => {
-    if (!v) return
-    if (props.after && toMin(v) <= toMin(props.after)) return
-    props.onChange(v)
+  const pick = (m: number): void => {
+    // 24:00 仍算当天结束；再往后才是次日
+    const next = m > 1440
+    props.onChange(fromMin(next ? m - 1440 : m), next)
     a.close()
+  }
+  const commitText = (v: string | null): void => {
+    if (!v) return
+    let m = toMin(v)
+    if (props.after) {
+      const s = toMin(props.after)
+      if (m <= s) {
+        if (!props.overnight) return
+        m += 1440
+      }
+    }
+    pick(m)
   }
 
   return (
@@ -64,7 +83,7 @@ export function TimeSelect(props: {
       <button ref={a.ref} className={cx('field-btn tnum', a.open && 'open')} onClick={a.toggle} disabled={props.disabled}>
         {props.value}
       </button>
-      <Popover anchor={a.el} open={a.open} onClose={a.close} width={props.after ? 168 : 120}>
+      <Popover anchor={a.el} open={a.open} onClose={a.close} width={props.after ? 176 : 120}>
         <input
           className="input time-input tnum"
           autoFocus
@@ -72,15 +91,18 @@ export function TimeSelect(props: {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') commit(parseTime(text))
+            if (e.key === 'Enter') commitText(parseTime(text))
           }}
         />
         <div className="time-list" ref={listRef}>
-          {options.map((t) => (
-            <button key={t} className={cx('menu-item tnum', t === props.value && 'selected')} onClick={() => commit(t)}>
-              <span>{t}</span>
-              {props.after && <span className="menu-meta">{durationLabel(toMin(t) - toMin(props.after))}</span>}
-            </button>
+          {options.map((m, i) => (
+            <Fragment key={m}>
+              {m > 1440 && (i === 0 || options[i - 1] <= 1440) && <div className="menu-label">次日</div>}
+              <button className={cx('menu-item tnum', m === current && 'selected')} onClick={() => pick(m)}>
+                <span>{fromMin(m > 1440 ? m - 1440 : m)}</span>
+                {props.after && <span className="menu-meta">{durationLabel(m - toMin(props.after))}</span>}
+              </button>
+            </Fragment>
           ))}
         </div>
       </Popover>
@@ -93,6 +115,8 @@ export function DatePicker(props: {
   onChange: (v: string) => void
   weekStart: number
   prefix?: string
+  /** 最早能选的日期（选了更早的就按这一天算），用于结束日期 */
+  min?: string
 }): React.JSX.Element {
   const a = useAnchor()
   const rel = relativeLabel(props.value)
@@ -113,7 +137,7 @@ export function DatePicker(props: {
             value={props.value}
             weekStart={props.weekStart}
             onSelect={(d) => {
-              props.onChange(d)
+              props.onChange(props.min && d < props.min ? props.min : d)
               a.close()
             }}
           />
