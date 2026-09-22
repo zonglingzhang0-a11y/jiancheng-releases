@@ -5,3 +5,4 @@ release/
 backup/
 .claude/settings.local.json
 video/out/
+video/reference/
