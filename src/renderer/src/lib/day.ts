@@ -159,7 +159,7 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
     const p = progress[key] ?? null
     const endsToday = daysLeft === 0
     const endLabel = task.allDay || !task.end ? '' : ` ${task.end}`
-    const label = endsToday ? `今天${endLabel}结束` : daysLeft === 1 ? `明天${endLabel}结束` : `还剩 ${daysLeft} 天`
+    const label = endsToday ? `今天${endLabel}结束` : daysLeft === 1 ? `明天${endLabel}结束` : `还剩 ${daysLeft} 天结束`
     out.push({
         task,
         date: d,
