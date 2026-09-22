@@ -35,7 +35,7 @@ npm run icons      # 重新生成应用与托盘图标
 
 ## 自动更新
 
-- 安装包发布在只放安装包的公开仓库 [jiancheng-releases](https://github.com/zonglingzhang0-a11y/jiancheng-releases)，源码不公开。
+- 源码和安装包都在 GitHub 仓库 [jiancheng-releases](https://github.com/zonglingzhang0-a11y/jiancheng-releases)，安装包挂在「Releases」里。
 - 程序启动 15 秒后检查一次，之后每 4 小时检查一次；有新版本在后台下载，下载完在标题栏显示「重启更新」，不重启的话下次退出时自动安装。
 - 设置 → 系统 里能看到当前版本、手动检查更新。
 - 发新版：改 `package.json` 里的版本号 → `npm run release`。访问令牌只放在本机的 `GH_TOKEN` 环境变量里，不写进代码，也不会打进安装包。
@@ -152,6 +152,8 @@ npm run icons      # 重新生成应用与托盘图标
 - `logs/issues.log`：窗口崩溃等异常记录（反馈问题时可以附上）
 
 ## 许可
+
+简程以 [MIT 许可证](LICENSE) 开源，可以自由使用、修改和再发布，保留原作者署名即可。
 
 随应用提供的字体均以 SIL Open Font License 1.1 授权，图标来自 Lucide（ISC 许可），完整许可文本见安装目录下的 `THIRD_PARTY_NOTICES.txt`。
 

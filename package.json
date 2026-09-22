@@ -5,6 +5,8 @@
   "description": "简程 · 以今天为中心的日程规划，按应用使用情况自动完成任务",
   "main": "./out/main/index.js",
   "author": "zzl",
+  "license": "MIT",
+  "repository": "github:zonglingzhang0-a11y/jiancheng-releases",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
