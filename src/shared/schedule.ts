@@ -58,8 +58,54 @@ export function occursOn(task: Task, date: string): boolean {
   }
 }
 
-/** 结束在开始那天之后的第几天 */
-export const spanOf = (task: Task): number => Math.max(0, Math.floor(task.days ?? 0))
+export const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
+
+/** 没有结束日期的事，往今天之后画多少天的淡出尾巴 */
+export const OPEN_TAIL = 7
+
+/**
+ * 一件长期事的把握：第 sureFrom 到第 sureTo 天确定在进行（从开始那天算第 0 天），
+ * 之前渐渐浮现、之后渐渐淡出，画到第 last 天为止。
+ * end：fixed 确定 · range 在预计区间里 · over 过了预计还没结束 · open 没有结束日期
+ */
+export interface Fuzz {
+  end: 'fixed' | 'range' | 'over' | 'open'
+  sureFrom: number
+  sureTo: number
+  last: number
+}
+
+/** 模糊起止只用在不重复的全天 / 多天日程上 */
+const canFuzz = (task: Task): boolean => !!task.allDay && task.repeat.type === 'none'
+
+export function fuzzOf(task: Task, today = todayKey()): Fuzz {
+  const days = Math.max(0, Math.floor(task.days ?? 0))
+  if (!canFuzz(task)) return { end: 'fixed', sureFrom: 0, sureTo: days, last: days }
+  const sureFrom = Math.max(0, Math.floor(task.startMax ?? 0))
+  const sofar = dayDiff(task.date, today)
+  const latest = Math.max(days, Math.floor(task.daysMax ?? days))
+  // 没有结束日期、或者过了预计还没结束：确定的部分画到今天，再淡出一周
+  const open = (to: number, end: Fuzz['end']): Fuzz => {
+    const sureTo = Math.max(to, sureFrom)
+    return { end, sureFrom, sureTo, last: sureTo + OPEN_TAIL }
+  }
+  if (task.endMode === 'open') return open(sofar, 'open')
+  if (task.endMode === 'range') {
+    if (sofar > latest) return open(sofar, 'over')
+    return { end: 'range', sureFrom, sureTo: Math.max(days, sureFrom), last: latest }
+  }
+  return { end: 'fixed', sureFrom, sureTo: Math.max(days, sureFrom), last: Math.max(days, sureFrom) }
+}
+
+/** 第 k 天的把握，0–1：确定的日子是 1，渐隐区里越往外越小 */
+export function sureness(f: Fuzz, k: number): number {
+  if (k < f.sureFrom) return (k + 1) / (f.sureFrom + 1)
+  if (k > f.sureTo) return (f.last - k + 1) / (f.last - f.sureTo + 1)
+  return 1
+}
+
+/** 结束在开始那天之后的第几天；说不准的按「现在看来」最远画到哪天 */
+export const spanOf = (task: Task): number => fuzzOf(task).last
 
 /**
  * 一次发生从开始那天 0 点算起的分钟范围 [开始, 结束)。

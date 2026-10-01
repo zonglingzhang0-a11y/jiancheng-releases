@@ -2,13 +2,17 @@
 // 跨天的「长期」事另算，不占色带，只在清单和周 / 月视图里出现
 import {
   addDays,
+  dayDiff,
   fromKey,
+  fuzzOf,
   isLong,
   occurrenceDates,
   occurrenceKey,
   occurrenceMinutes,
   occurrencesOn,
-  todayKey
+  sureness,
+  todayKey,
+  type Fuzz
 } from '@shared/schedule'
 import type { AppData, AutoProgress, Task } from '@shared/types'
 import { iconOf } from './icons'
@@ -63,6 +67,17 @@ export interface SpanItem {
   startMin: number | null
   endMin: number | null
   label: string
+  /** 进度条右侧的天数，比如「3 / 5 天」「3 / 4–7 天」「第 9 天」 */
+  dayText: string
+  /** 进度条上开始、结束说不准的位置（0–1）；确定的是 0 和 1 */
+  fadeIn: number
+  fadeOut: number
+  /** 结束、开始说不准时清单里给的按钮：过了预计点「结束」，预计开始的那几天点「开始」 */
+  action: 'end' | 'start' | null
+  /** 结束说不准（预计区间 / 没定 / 超出预计）：打勾就等于在这一天结束 */
+  fuzzyEnd: boolean
+  /** 正在看的那一天 */
+  viewDate: string
   progress: AutoProgress | null
 }
 
@@ -73,13 +88,18 @@ export interface SpanRange {
   date: string
   totalDays: number
   done: boolean
-  /** 起止日期 */
+  /** 起止日期（说不准的按画出来的范围） */
   s: string
   e: string
+  fuzz: Fuzz
+  /** 没有结束日期，或者过了预计还没结束 */
+  open: boolean
 }
 
+/** 某一天在这段长期事里的把握，0–1 */
+export const surenessOn = (r: SpanRange, d: string): number => sureness(r.fuzz, dayDiff(r.date, d))
+
 const CARRY_DAYS = 7
-const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
 
 function build(
   data: AppData,
@@ -143,6 +163,7 @@ export function dayItems(data: AppData, progress: Record<string, AutoProgress>, 
 export function spanItems(data: AppData, progress: Record<string, AutoProgress>, date: string): SpanItem[] {
   const out: SpanItem[] = []
   const now = Date.now()
+  const today = todayKey()
   for (const { task, date: d } of occurrencesOn(data.tasks, date)) {
     if (!isLong(task)) continue
     const r = occurrenceMinutes(task)
@@ -157,9 +178,33 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
     const key = occurrenceKey(task.id, d)
     const c = data.completions[key]
     const p = progress[key] ?? null
-    const endsToday = daysLeft === 0
+    const f = fuzzOf(task, today)
+    const k = dayNo - 1
+    const waiting = k < f.sureFrom
+    const endsToday = daysLeft === 0 && f.end === 'fixed'
     const endLabel = task.allDay || !task.end ? '' : ` ${task.end}`
-    const label = endsToday ? `今天${endLabel}结束` : daysLeft === 1 ? `明天${endLabel}结束` : `还剩 ${daysLeft} 天结束`
+    let label = endsToday ? `今天${endLabel}结束` : daysLeft === 1 ? `明天${endLabel}结束` : `还剩 ${daysLeft} 天结束`
+    let dayText = `${dayNo} / ${totalDays} 天`
+    let action: SpanItem['action'] = null
+    // 预计区间：最早第 earliest 天、最晚第 latest 天结束
+    const earliest = Math.max(task.days ?? 0, f.sureFrom)
+    const latest = Math.max(earliest, task.daysMax ?? 0)
+    if (waiting) {
+      label = `预计 ${f.sureFrom - k} 天内开始`
+      dayText = ''
+      if (date === today) action = 'start'
+    } else if (f.end === 'range' || (f.end === 'over' && k <= latest)) {
+      label = k < earliest ? `预计还剩 ${earliest - k}–${latest - k} 天结束` : latest === k ? '预计今天结束' : `预计 ${latest - k} 天内结束`
+      dayText = `${dayNo} / ${earliest + 1}–${latest + 1} 天`
+    } else if (f.end === 'over') {
+      label = `已超出预计 ${k - latest} 天`
+      dayText = `第 ${dayNo} 天`
+      if (date === today) action = 'end'
+    } else if (f.end === 'open') {
+      label = dayNo === 1 ? '今天开始' : `已进行 ${dayNo} 天`
+      dayText = '没有结束日期'
+    }
+    const len = f.last + 1
     out.push({
         task,
         date: d,
@@ -175,11 +220,17 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
         ratio: Math.max(0, Math.min(1, (now - startMs) / Math.max(1, endMs - startMs))),
         startMs,
         endMs,
-        startsToday: dayNo === 1,
+        startsToday: dayNo === 1 && f.sureFrom === 0,
         endsToday,
         startMin: !task.allDay && dayNo === 1 ? r[0] : null,
         endMin: !task.allDay && endsToday ? r[1] - (totalDays - 1) * 1440 : null,
         label,
+        dayText,
+        fadeIn: f.sureFrom / len,
+        fadeOut: f.end === 'fixed' ? 1 : (f.sureTo + 1) / len,
+        action,
+        fuzzyEnd: f.end !== 'fixed',
+        viewDate: date,
         progress: p
       })
   }
@@ -189,12 +240,14 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
 /** 一段日期范围内的长期事，每次发生只出现一次 */
 export function spansIn(data: AppData, from: string, to: string): SpanRange[] {
   const seen = new Map<string, SpanRange>()
+  const today = todayKey()
   for (let d = from; d <= to; d = addDays(d, 1)) {
     for (const { task, date } of occurrencesOn(data.tasks, d)) {
       if (!isLong(task)) continue
       const key = occurrenceKey(task.id, date)
       if (seen.has(key)) continue
       const dates = occurrenceDates(task, date)
+      const fuzz = fuzzOf(task, today)
       seen.set(key, {
         key,
         task,
@@ -202,7 +255,9 @@ export function spansIn(data: AppData, from: string, to: string): SpanRange[] {
         totalDays: dates.length,
         done: data.completions[key]?.done ?? false,
         s: dates[0],
-        e: dates[dates.length - 1]
+        e: dates[dates.length - 1],
+        fuzz,
+        open: fuzz.end === 'open' || fuzz.end === 'over'
       })
     }
   }

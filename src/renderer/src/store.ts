@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { occurrenceKey, todayKey, uid } from '@shared/schedule'
+import { dayDiff, occurrenceKey, todayKey, uid } from '@shared/schedule'
 import type { QuickParsed } from '@shared/quickParse'
 import {
   DEFAULT_SETTINGS,
@@ -82,6 +82,10 @@ interface Store {
   deleteTask(id: string, mode: 'all' | 'one', date?: string): Promise<void>
   toggle(taskId: string, date: string): Promise<void>
   toggleSub(task: Task, subId: string, date: string): Promise<void>
+  /** 结束说不准的长期事：在 on 这一天结束，变成确定的结束日期，并标为完成 */
+  finishSpan(task: Task, on: string): Promise<void>
+  /** 开始说不准的长期事：从 on 这一天开始，变成确定的开始日期，结束日期不动 */
+  beginSpan(task: Task, on: string): Promise<void>
   /** 把随时待办排进时间轴；重复的待办只改这一天 */
   scheduleAt(task: Task, fromDate: string, date: string, start: string, end: string): Promise<void>
   updateSettings(patch: Partial<Settings>): Promise<void>
@@ -128,6 +132,11 @@ export function taskFromQuick(parsed: QuickParsed): Task {
     date: parsed.date,
     start: parsed.start,
     end: parsed.end,
+    ...(parsed.allDay ? { allDay: true } : {}),
+    ...(parsed.days ? { days: parsed.days } : {}),
+    ...(parsed.endMode ? { endMode: parsed.endMode } : {}),
+    ...(parsed.endMode === 'range' ? { daysMax: parsed.daysMax } : {}),
+    ...(parsed.startMax ? { startMax: parsed.startMax } : {}),
     repeat: parsed.repeat,
     auto
   })
@@ -316,6 +325,33 @@ export const useStore = create<Store>((set, get) => ({
       s.id === subId ? { ...s, doneOn: s.doneOn.includes(date) ? s.doneOn.filter((d) => d !== date) : [...s.doneOn, date] } : s
     )
     await get().saveTask({ ...task, subtasks, updatedAt: Date.now() })
+  },
+
+  async finishSpan(task, on) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { endMode, daysMax, ...rest } = task
+    const days = Math.max(0, dayDiff(task.date, on))
+    const startMax = rest.startMax ? Math.min(rest.startMax, days) : undefined
+    await get().saveTask({ ...rest, days, startMax, updatedAt: Date.now() })
+    const key = occurrenceKey(task.id, task.date)
+    const { data } = get()
+    if (data.completions[key]?.done) return
+    set({ data: { ...data, completions: { ...data.completions, [key]: { done: true, by: 'manual', at: Date.now() } } } })
+    await api().setCompletion(key, true)
+  },
+
+  async beginSpan(task, on) {
+    // 结束日期是绝对的，开始挪到 on 以后，相对的天数跟着减
+    const shift = Math.max(0, dayDiff(task.date, on))
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { startMax, ...rest } = task
+    await get().saveTask({
+      ...rest,
+      date: on,
+      days: Math.max(0, (task.days ?? 0) - shift),
+      daysMax: task.daysMax === undefined ? undefined : Math.max(0, task.daysMax - shift),
+      updatedAt: Date.now()
+    })
   },
 
   async scheduleAt(task, fromDate, date, start, end) {

@@ -1,5 +1,5 @@
 // 一句话添加日程：从中文自然语言里识别日期、时间、时长、重复和「智能完成」规则
-import { addDays, fromKey, fromMin, pad } from './schedule'
+import { addDays, dayDiff, fromKey, fromMin, pad, toKey } from './schedule'
 import type { Repeat } from './types'
 
 export interface QuickApp {
@@ -21,6 +21,11 @@ export interface QuickParsed {
   allDay: boolean
   /** 结束在开始那天之后的第几天 */
   days: number
+  /** 结束说不准：range 在第 days 到第 daysMax 天之间 · open 做完为止 */
+  endMode?: 'range' | 'open'
+  daysMax?: number
+  /** 开始说不准：最晚在 date 之后第 startMax 天开始 */
+  startMax?: number
   repeat: Repeat
   auto: { kind: 'app' | 'title'; apps: string[]; keywords: string[]; minutes: number } | null
   tokens: QuickToken[]
@@ -31,6 +36,47 @@ const WD_LABEL = ['日', '一', '二', '三', '四', '五', '六']
 const CN_NUM: Record<string, number> = { 半: 0.5, 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }
 
 const dow = (key: string): number => fromKey(key).getDay()
+
+/** 「十二」「二十」「两」这样的中文数字 */
+function cnNum(w: string): number {
+  if (/^\d+$/.test(w)) return Number(w)
+  const m = w.match(/^([一两二三四五六七八九])?十([一二三四五六七八九])?$/)
+  if (m) return (m[1] ? CN_NUM[m[1]] : 1) * 10 + (m[2] ? CN_NUM[m[2]] : 0)
+  return CN_NUM[w] ?? NaN
+}
+const NUM = '(\\d{1,3}|[一两二三四五六七八九]?十[一二三四五六七八九]?|[半一两二三四五六七八九])'
+const UNIT = '(?:个)?(天|周|星期|礼拜|月)'
+const unitDays = (u: string): number => (u === '天' ? 1 : u === '月' ? 30 : 7)
+
+/** 一段说不准具体哪天的时间：下个月、下周、10 月中旬、月底 */
+const PERIOD_W = '下个?月|下个?(?:周|星期|礼拜)(?![一二三四五六日天])|\\d{1,2}月(?:初|上旬|中旬|中|下旬|底|末)|(?:这个?|本)?月(?:初|中旬|下旬|底|末)'
+
+function periodOf(w: string, today: string): [string, string] | null {
+  const t = fromKey(today)
+  if (/^下个?月$/.test(w)) return [toKey(new Date(t.getFullYear(), t.getMonth() + 1, 1)), toKey(new Date(t.getFullYear(), t.getMonth() + 2, 0))]
+  if (/^下个?(?:周|星期|礼拜)$/.test(w)) {
+    const monday = addDays(today, -((dow(today) + 6) % 7) + 7)
+    return [monday, addDays(monday, 6)]
+  }
+  const m = w.match(/^(?:(\d{1,2})月|(?:这个?|本)?月)(初|上旬|中旬|中|下旬|底|末)$/)
+  if (!m) return null
+  const month = m[1] ? Number(m[1]) - 1 : t.getMonth()
+  if (month > 11) return null
+  const [d0, d1] = /初|上旬/.test(m[2]) ? [1, 10] : /中/.test(m[2]) ? [11, 20] : [21, 0]
+  const range = (y: number): [string, string] => [toKey(new Date(y, month, d0)), toKey(d1 ? new Date(y, month, d1) : new Date(y, month + 1, 0))]
+  let r = range(t.getFullYear())
+  if (r[1] < today) r = range(t.getFullYear() + 1)
+  return [r[0] < today ? today : r[0], r[1]]
+}
+
+/** 列表里的短日期：今天 / 明天 / 后天 / 10月8日 */
+function shortLabel(date: string, today: string): string {
+  if (date === today) return '今天'
+  if (date === addDays(today, 1)) return '明天'
+  if (date === addDays(today, 2)) return '后天'
+  const d = fromKey(date)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
 
 function relLabel(date: string, today: string): string {
   if (date === today) return '今天'
@@ -177,7 +223,6 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     dateFound = true
   }
   const pointMin = (mm?: string, half?: string, mm2?: string): number => Number(mm ?? mm2 ?? (half ? 30 : 0))
-  const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
   /** 「A 到 B」：正在进行的时段（B 还没过）保留今天之前的开始日期，整段都过去了才往后顺延 */
   const rangeOf = (w1: string, w2: string): [string, string] | null => {
     const a = dateWord(w1, today, null, true)
@@ -267,13 +312,72 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     end = null
   }
 
+  // ---- 说不准的开始和结束（不定时间的事才有）----
+  let endMode: 'range' | 'open' | undefined
+  let startMax = 0
+  /** 预计的总天数范围，或者预计结束的日期范围 */
+  let length: [number, number] | null = null
+  let endPeriod: [string, string] | null = null
+  if (start === null && repeat.type === 'none') {
+    // 「找到为止」「做完为止」：还没定结束
+    if (take(/(?:[做找读写搞弄学看改修练考背装][完到好定会成齐]|完成|结束)为止/)) endMode = 'open'
+    // 「预计 10 月初结束」「月底前搞定」
+    const ep = take(new RegExp(`(?:预计|大概|估计|争取|最晚)?\\s*在?\\s*(${PERIOD_W})\\s*(?:之?前)?\\s*(?:结束|完成|搞定|做完|完工|弄完|交)`))
+    if (ep) endPeriod = periodOf(ep[1], today)
+    // 「下个月找个时间开始」「10 月中旬开工」
+    const sp = take(new RegExp(`从?\\s*(${PERIOD_W})\\s*(?:找个?时间|找一天|抽空|某天|的时候)?\\s*(?:开始|动工|开工|启动|动手)`))
+    const sr = sp && periodOf(sp[1], today)
+    if (sr) {
+      setDate(sr[0])
+      startMax = Math.max(0, dayDiff(sr[0], sr[1]))
+    }
+    // 「3 到 5 天」「两到三周」
+    const rg = take(new RegExp(`(?:大概|大约|预计|估计|差不多|约莫?)?\\s*(?:要|需要|得)?\\s*${NUM}\\s*${SEP}\\s*${NUM}\\s*${UNIT}(?:左右)?`))
+    if (rg) {
+      const u = unitDays(rg[3])
+      const a = Math.round(cnNum(rg[1]) * u)
+      const b = Math.round(cnNum(rg[2]) * u)
+      if (a > 0 && b > a) length = [a, b]
+    }
+    // 「大概两周」「预计一个月左右」：前后各留四分之一
+    const ab = !length && take(new RegExp(`(?:大概|大约|预计|估计|差不多|约莫?)\\s*(?:要|需要|得)?\\s*${NUM}\\s*${UNIT}(?:左右)?|${NUM}\\s*${UNIT}左右`))
+    if (ab) {
+      const n = cnNum(ab[1] ?? ab[3])
+      const total = Math.round(n * unitDays(ab[2] ?? ab[4]))
+      if (total > 0) {
+        const d = Math.max(1, Math.round(total / 4))
+        length = [Math.max(1, total - d), total + d]
+      }
+    }
+    if (endMode || endPeriod || startMax || length) allDay = true
+  }
+
   // ---- 全天、连续几天 ----
   if (start === null) {
     if (take(/全天|一整天/)) allDay = true
-    const n = take(/(?:连续|持续|为期)?\s*(\d{1,3}|[两二三四五六七八九十])\s*天(?![后前内])/)
+    const n = take(/(?:连续|持续|为期)?\s*(\d{1,3}|[两二三四五六七八九十])\s*天(?![后前内])/) ??
+      take(new RegExp(`(?:连续|持续|为期)\\s*${NUM}\\s*${UNIT}`))
     if (n) {
       allDay = true
-      days = Math.max(0, (CN_NUM[n[1]] ?? Number(n[1])) - 1)
+      days = Math.max(0, Math.round(cnNum(n[1]) * (n[2] ? unitDays(n[2]) : 1)) - 1)
+      if (startMax && !length) length = [days + 1, days + 1]
+    }
+  }
+
+  // 把说不准的部分换成相对开始那天的天数：最早结束不早于最晚开始
+  let daysMax = 0
+  if (allDay && repeat.type === 'none') {
+    if (endPeriod && endPeriod[1] >= date) {
+      days = Math.max(startMax, dayDiff(date, endPeriod[0]))
+      daysMax = Math.max(days, dayDiff(date, endPeriod[1]))
+      endMode = daysMax > days ? 'range' : undefined
+    } else if (length) {
+      days = Math.max(startMax, length[0] - 1)
+      daysMax = Math.max(days, startMax + length[1] - 1)
+      endMode = daysMax > days ? 'range' : undefined
+    } else if (startMax && !endMode) {
+      // 只说了什么时候开始，没说多久：结束先算没定
+      endMode = 'open'
     }
   }
 
@@ -306,7 +410,19 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     days = Math.floor((end - 1) / 1440)
     end -= days * 1440
   }
-  if (allDay) {
+  if (allDay && (endMode || startMax)) {
+    const sl = (k: number): string => shortLabel(addDays(date, k), today)
+    tokens.push({ kind: 'date', label: startMax ? `${sl(0)}–${sl(startMax)} 之间开始` : `${sl(0)}起` })
+    tokens.push({
+      kind: 'date',
+      label:
+        endMode === 'open'
+          ? '做完为止'
+          : endMode === 'range'
+            ? `预计 ${sl(days)}–${sl(daysMax)} 结束`
+            : `${sl(days)} 结束`
+    })
+  } else if (allDay) {
     const last = addDays(date, days)
     tokens.push({ kind: 'date', label: days ? `${relLabel(date, today)} – ${relLabel(last, today)} · ${days + 1} 天` : `${relLabel(date, today)} 全天` })
   } else if (dateFound) tokens.push({ kind: 'date', label: repeat.type === 'none' ? relLabel(date, today) : `从${relLabel(date, today)}起` })
@@ -335,6 +451,9 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
     end: allDay || end === null ? null : fromMin(end),
     allDay,
     days: start === null && !allDay ? 0 : days,
+    ...(endMode ? { endMode } : {}),
+    ...(endMode === 'range' ? { daysMax } : {}),
+    ...(startMax ? { startMax } : {}),
     repeat,
     auto,
     tokens

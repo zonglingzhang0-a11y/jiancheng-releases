@@ -117,16 +117,19 @@ export function DatePicker(props: {
   prefix?: string
   /** 最早能选的日期（选了更早的就按这一天算），用于结束日期 */
   min?: string
+  /** 只写「10月1日」，不带星期和「昨天」，放在「大概在 A – B」这种一行两个日期的地方 */
+  compact?: boolean
 }): React.JSX.Element {
   const a = useAnchor()
-  const rel = relativeLabel(props.value)
+  const rel = props.compact ? null : relativeLabel(props.value)
   return (
     <>
       <button ref={a.ref} className={cx('field-btn', a.open && 'open')} onClick={a.toggle}>
-        <CalendarDays size={14} className="chev" />
+        {!props.compact && <CalendarDays size={14} className="chev" />}
         <span>
           {props.prefix && <span className="field-rel">{props.prefix} </span>}
-          {dayTitle(props.value)} {WEEKDAY[weekdayOf(props.value)]}
+          {dayTitle(props.value)}
+          {!props.compact && ` ${WEEKDAY[weekdayOf(props.value)]}`}
           {rel && <span className="field-rel"> · {rel}</span>}
         </span>
         <ChevronDown size={14} className="chev" />

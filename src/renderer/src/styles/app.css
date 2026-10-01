@@ -3072,9 +3072,31 @@ html.route-panel body {
   white-space: nowrap;
 }
 .lng-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11.5px;
   color: var(--ink-2);
   white-space: nowrap;
+}
+/* 过了预计还没结束：「结束」；预计开始的那几天：「开始」 */
+.lng-act {
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid var(--ink);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+}
+.lng-act:hover,
+.lng-act:focus-visible {
+  color: #fff;
+  background: var(--ink);
+  outline: none;
 }
 .lng-bar {
   grid-column: 2 / 4;
@@ -3185,20 +3207,11 @@ html.route-panel body {
 .spanline {
   height: 5px;
 }
+/* 深浅 = 那天在进行的件数，按把握计；--a 由程序算好 */
 .spanline i {
+  --a: 0;
   border-radius: 2px;
-}
-.spanline i.lv1 {
-  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.18) 0 5px, transparent 5px 8px);
-}
-.spanline i.lv2 {
-  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.34) 0 5px, transparent 5px 8px);
-}
-.spanline i.lv3 {
-  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.52) 0 5px, transparent 5px 8px);
-}
-.spanline i.lv4 {
-  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, 0.72) 0 5px, transparent 5px 8px);
+  background: repeating-linear-gradient(90deg, rgba(23, 24, 27, var(--a)) 0 5px, transparent 5px 8px);
 }
 .spanline i.hot {
   background: var(--ink);

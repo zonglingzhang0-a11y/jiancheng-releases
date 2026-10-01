@@ -130,12 +130,28 @@ function Item({ item, open, onOpen }: { item: DayItem; open: boolean; onOpen: ()
   )
 }
 
+/** 进度条两端说不准的部分渐渐变淡 */
+function fadeMask(item: SpanItem): React.CSSProperties | undefined {
+  if (item.fadeIn <= 0 && item.fadeOut >= 1) return undefined
+  const a = `${(item.fadeIn * 100).toFixed(1)}%`
+  const b = `${(item.fadeOut * 100).toFixed(1)}%`
+  const g = `linear-gradient(90deg, rgba(0,0,0,${item.fadeIn > 0 ? 0.15 : 1}) 0%, #000 ${a}, #000 ${b}, rgba(0,0,0,${item.fadeOut < 1 ? 0.08 : 1}) 100%)`
+  return { maskImage: g, WebkitMaskImage: g }
+}
+
 /** 长期事：一根进度条 + 还剩几天；鼠标停上去，周 / 月视图里那几天会亮起来 */
 function SpanRow({ item }: { item: SpanItem }): React.JSX.Element {
   const toggle = useStore((s) => s.toggle)
+  const finishSpan = useStore((s) => s.finishSpan)
+  const beginSpan = useStore((s) => s.beginSpan)
   const openTask = useStore((s) => s.openTask)
   const setHotSpan = useStore((s) => s.setHotSpan)
   const icons = useStore((s) => s.data.settings.look.icons)
+  // 结束说不准的事，打勾就是在这一天结束
+  const finish = (e: React.MouseEvent): void => {
+    burstAt(e)
+    finishSpan(item.task, item.viewDate)
+  }
   return (
     <div
       className={cx('lng', item.done && 'done')}
@@ -153,19 +169,32 @@ function SpanRow({ item }: { item: SpanItem }): React.JSX.Element {
       <Check
         on={item.done}
         onToggle={(e) => {
+          if (!item.done && item.fuzzyEnd) return finish(e)
           if (!item.done) burstAt(e)
           toggle(item.task.id, item.date)
         }}
       />
       {icons && <TaskIcon name={item.icon} size={14} className="ico" />}
       <span className="ttl">{item.task.title}</span>
-      <span className="lng-left">{item.label}</span>
-      <span className="lng-bar">
+      <span className="lng-left">
+        {item.label}
+        {item.action && !item.done && (
+          <button
+            className="lng-act fx"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (item.action === 'end') finish(e)
+              else beginSpan(item.task, item.viewDate)
+            }}
+          >
+            {item.action === 'end' ? '结束' : '开始'}
+          </button>
+        )}
+      </span>
+      <span className="lng-bar" style={fadeMask(item)}>
         <i style={{ width: `${Math.round(item.ratio * 100)}%` }} />
       </span>
-      <span className="lng-day tnum">
-        {item.dayNo} / {item.totalDays} 天
-      </span>
+      <span className="lng-day tnum">{item.dayText}</span>
     </div>
   )
 }

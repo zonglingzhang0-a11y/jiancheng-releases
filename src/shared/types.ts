@@ -55,6 +55,14 @@ export interface Task {
   allDay?: boolean
   /** 跨天：结束在开始那天之后的第几天（0 = 当天结束，1 = 次日结束……） */
   days?: number
+  /**
+   * 结束说不准（只用在不重复的全天 / 多天日程上）：
+   * range 大概在第 days 到第 daysMax 天之间结束 · open 还没定，做完为止
+   */
+  endMode?: 'range' | 'open'
+  daysMax?: number
+  /** 开始说不准：最早 date 那天，最晚 date 之后第 startMax 天开始 */
+  startMax?: number
   color: ColorKey
   repeat: Repeat
   auto: AutoRule | null

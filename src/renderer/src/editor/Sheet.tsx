@@ -57,15 +57,39 @@ function IconPicker(props: { task: Task; onChange: (icon: string | null) => void
 }
 
 type TimeMode = 'any' | 'timed' | 'allday'
+type EndKind = 'fixed' | 'range' | 'open'
 
 const dayDiff = (a: string, b: string): number => Math.round((fromKey(b).getTime() - fromKey(a).getTime()) / 86400000)
 
 /** 从开始到结束一共多少分钟（定时间的日程） */
 const spanMinutes = (task: Task): number => (task.days ?? 0) * 1440 + toMin(task.end!) - toMin(task.start!)
 
-/** 时长的说法：跨午夜的标出来，超过一天的按「N 天 N 小时」 */
+/** 不重复的全天 / 多天日程才能把开始、结束说成「大概」 */
+const canFuzz = (task: Task): boolean => !!task.allDay && task.repeat.type === 'none'
+
+/** 保存前去掉用不上的模糊起止字段 */
+function cleanFuzz(task: Task): Task {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { endMode, daysMax, startMax, ...rest } = task
+  if (!canFuzz(task)) return rest
+  return {
+    ...rest,
+    ...(endMode ? { endMode } : {}),
+    ...(endMode === 'range' ? { daysMax } : {}),
+    ...(startMax ? { startMax } : {})
+  }
+}
+
+/** 时长的说法：跨午夜的标出来，超过一天的按「N 天 N 小时」，说不准的给个范围 */
 function spanLabel(task: Task): string {
-  if (task.allDay) return `共 ${(task.days ?? 0) + 1} 天`
+  if (task.allDay) {
+    const fz = canFuzz(task)
+    if (fz && task.endMode === 'open') return '做完为止'
+    const days = task.days ?? 0
+    const lo = days - (fz ? (task.startMax ?? 0) : 0) + 1
+    const hi = (fz && task.endMode === 'range' ? Math.max(days, task.daysMax ?? days) : days) + 1
+    return lo === hi ? `共 ${hi} 天` : `共 ${lo}–${hi} 天`
+  }
   if (!task.start || !task.end) return ''
   const total = spanMinutes(task)
   if (total < 1440) return (task.days ?? 0) > 0 ? `${durationLabel(total)} · 跨过午夜` : durationLabel(total)
@@ -75,7 +99,7 @@ function spanLabel(task: Task): string {
 }
 
 const partOfDay = (task: Task): string => {
-  if (task.allDay) return (task.days ?? 0) > 0 ? '多天' : '全天'
+  if (task.allDay) return (task.days ?? 0) > 0 || (canFuzz(task) && (task.endMode || task.startMax)) ? '多天' : '全天'
   if (!task.start) return '随时'
   if (task.end && spanMinutes(task) >= 1440) return '多天'
   const m = toMin(task.start)
@@ -162,7 +186,7 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
     let auto = task.auto
     if (auto && auto.scope === 'slot' && (task.allDay || !(task.start && task.end))) auto = { ...auto, scope: 'day' }
     const pending = newSub.trim() ? [...(task.subtasks ?? []), { id: uid(), title: newSub.trim(), doneOn: [] }] : task.subtasks
-    const next = { ...task, title: task.title.trim(), auto, subtasks: pending, updatedAt: Date.now() }
+    const next = cleanFuzz({ ...task, title: task.title.trim(), auto, subtasks: pending, updatedAt: Date.now() })
     saveTask(next)
     if (editor.isNew) notifyCreated(next)
     closeEditor()
@@ -210,6 +234,34 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
     } else set({ days: n })
   }
   const repeatType = task.repeat.type
+
+  // ---- 说不准的开始和结束（不重复的全天 / 多天日程）----
+  const fuzzOk = mode === 'allday' && repeatType === 'none'
+  const endKind: EndKind = fuzzOk ? (task.endMode ?? 'fixed') : 'fixed'
+  const startMax = fuzzOk ? (task.startMax ?? 0) : 0
+  const daysMax = Math.max(days + 1, task.daysMax ?? days + 1)
+  /** 最早的结束不能早于最晚的开始 */
+  const pushEnd = (minDays: number): Partial<Task> =>
+    endKind === 'open' || days >= minDays ? {} : { days: minDays, ...(endKind === 'range' ? { daysMax: Math.max(daysMax, minDays + 1) } : {}) }
+  const setEndKind = (k: EndKind): void => {
+    if (k === 'fixed') set({ endMode: undefined, daysMax: undefined })
+    else if (k === 'range') set({ endMode: 'range', days: Math.max(days, startMax), daysMax: Math.max(days, startMax) + 2 })
+    else set({ endMode: 'open' })
+  }
+  const setStartFuzzy = (on: boolean): void => {
+    if (!on) return set({ startMax: undefined })
+    const n = endKind === 'open' ? 7 : Math.max(1, Math.min(7, days))
+    set({ startMax: n, ...pushEnd(n) })
+  }
+  const setLatestStart = (d: string): void => {
+    const n = Math.max(1, dayDiff(task.date, d))
+    set({ startMax: n, ...pushEnd(n) })
+  }
+  const setEarliestEnd = (d: string): void => {
+    const n = Math.max(startMax, dayDiff(task.date, d))
+    set({ days: n, daysMax: n >= daysMax ? n + (daysMax - days) : daysMax })
+  }
+  const setLatestEnd = (d: string): void => set({ daysMax: Math.max(days + 1, dayDiff(task.date, d)) })
   const setRepeat = (type: RepeatType): void => {
     const weekdays = type === 'weekly' && !task.repeat.weekdays.length ? [fromKey(task.date).getDay()] : task.repeat.weekdays
     set({ repeat: { ...task.repeat, type, weekdays } })
@@ -289,13 +341,48 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
               <div className="when">
                 <span className="when-k">开始</span>
                 <div className="fline">
-                  <DatePicker value={task.date} onChange={(date) => set({ date })} weekStart={weekStart} prefix={repeatType !== 'none' ? '起始' : undefined} />
+                  {fuzzOk && (
+                    <Select<'fixed' | 'range'>
+                      value={startMax > 0 ? 'range' : 'fixed'}
+                      onChange={(v) => setStartFuzzy(v === 'range')}
+                      width={96}
+                      options={[
+                        { value: 'fixed', label: '具体日期' },
+                        { value: 'range', label: '大概在' }
+                      ]}
+                    />
+                  )}
+                  <DatePicker value={task.date} onChange={(date) => set({ date })} weekStart={weekStart} prefix={repeatType !== 'none' ? '起始' : undefined} compact={startMax > 0} />
+                  {startMax > 0 && (
+                    <>
+                      <span className="time-sep">–</span>
+                      <DatePicker value={addDays(task.date, startMax)} min={addDays(task.date, 1)} onChange={setLatestStart} weekStart={weekStart} compact />
+                    </>
+                  )}
                   {mode === 'timed' && <TimeSelect value={task.start!} onChange={(v) => setStart(v)} />}
                 </div>
                 <span className="when-k">结束</span>
                 <div className="fline">
-                  {repeatType === 'none' ? (
-                    <DatePicker value={endDate} min={task.date} onChange={setEndDate} weekStart={weekStart} />
+                  {fuzzOk && (
+                    <Select<EndKind>
+                      value={endKind}
+                      onChange={setEndKind}
+                      width={96}
+                      options={[
+                        { value: 'fixed', label: '具体日期' },
+                        { value: 'range', label: '大概在' },
+                        { value: 'open', label: '还没定', meta: '做完为止' }
+                      ]}
+                    />
+                  )}
+                  {endKind === 'open' ? null : endKind === 'range' ? (
+                    <>
+                      <DatePicker value={endDate} min={addDays(task.date, startMax)} onChange={setEarliestEnd} weekStart={weekStart} compact />
+                      <span className="time-sep">–</span>
+                      <DatePicker value={addDays(task.date, daysMax)} min={addDays(endDate, 1)} onChange={setLatestEnd} weekStart={weekStart} compact />
+                    </>
+                  ) : repeatType === 'none' ? (
+                    <DatePicker value={endDate} min={addDays(task.date, startMax)} onChange={setEndDate} weekStart={weekStart} />
                   ) : (
                     // 重复的日程：结束说成「当天 / 次日 / 第 N 天」，不说具体日期，免得看起来像重复到那天为止
                     <Select<number>
@@ -315,7 +402,10 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
             )}
             {mode === 'any' && <div className="field-hint">没定时间的待办会漂在色带里，随时可以拖进空档</div>}
             {mode === 'timed' && days > 0 && spanMinutes(task) < 1440 && <div className="field-hint">跨过午夜：色带上会分成两段，前一天晚上和第二天早上各一段</div>}
-            {(mode === 'allday' || (mode === 'timed' && spanMinutes(task) >= 1440)) && (
+            {endKind === 'open' && <div className="field-hint">没有结束日期：清单里显示已经进行了几天，周 / 月视图只往后画一周；做完时打个勾，就停在那一天</div>}
+            {endKind === 'range' && <div className="field-hint">预计的那几天在周 / 月视图里渐渐变淡；过了最晚那天还没做完，清单里会提醒你点「结束」</div>}
+            {startMax > 0 && <div className="field-hint">开始前说不准的那几天渐渐浮现；真正开始的那天，在清单里点「开始」</div>}
+            {endKind === 'fixed' && startMax === 0 && (mode === 'allday' || (mode === 'timed' && spanMinutes(task) >= 1440)) && (
               <div className="field-hint">跨一整天以上的事不占色带，放在右边清单最下面的「长期」里，周 / 月视图里能看到它的范围</div>
             )}
           </div>

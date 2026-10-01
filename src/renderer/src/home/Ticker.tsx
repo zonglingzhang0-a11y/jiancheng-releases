@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { addDays, fromKey, todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { dayItems, dayRatio, spansIn, timedItems, type SpanRange } from '../lib/day'
+import { dayItems, dayRatio, spansIn, surenessOn, timedItems, type SpanRange } from '../lib/day'
 import { sunOf } from '../lib/cal'
 import { linearGradient, ribbonGradient, xOf } from '../lib/ribbon'
 import { monthMatrix, sameMonth, WEEKDAY_SHORT, weekDates } from '../lib/dates'
@@ -13,22 +13,49 @@ const CN_MONTH = ['一', '二', '三', '四', '五', '六', '七', '八', '九',
  * 跨天的事：一周以内的画大框（最多三行），一周以上的合并成一根虚线，
  * 深浅表示那天有几件在进行；鼠标停在清单里某条长期事上时，它盖住的那几天会亮起来
  */
+/** 合并线的深浅：1、2、3、4 件以上各一档，中间按把握平滑过渡，不满 1 件的跟着淡下去 */
+const LINE_ALPHA = [0, 0.18, 0.34, 0.52, 0.72]
+function lineAlpha(c: number): number {
+  if (c <= 0.02) return 0
+  if (c >= 4) return LINE_ALPHA[4]
+  const i = Math.floor(c)
+  return LINE_ALPHA[i] + (LINE_ALPHA[i + 1] - LINE_ALPHA[i]) * (c - i)
+}
+
+/** 大框里说不准的那几天渐渐变淡：每天取当天的把握，连成一条渐变 */
+function boxMask(s: SpanRange, days: string[]): React.CSSProperties | undefined {
+  const w = days.map((d) => surenessOn(s, d))
+  if (w.every((x) => x >= 1)) return undefined
+  const n = w.length
+  const stops = w.map((x, i) => `rgba(0,0,0,${x.toFixed(2)}) ${(((i + 0.5) / n) * 100).toFixed(1)}%`)
+  const g = `linear-gradient(90deg, rgba(0,0,0,${w[0].toFixed(2)}) 0%, ${stops.join(', ')}, rgba(0,0,0,${w[n - 1].toFixed(2)}) 100%)`
+  return { maskImage: g, WebkitMaskImage: g }
+}
+
+const spanTitle = (s: SpanRange): string => {
+  const f = s.fuzz
+  if (f.end === 'open') return `${s.task.title} · 没有结束日期`
+  if (f.end === 'over') return `${s.task.title} · 已超出预计`
+  if (f.end === 'range') return `${s.task.title} · 预计 ${(s.task.days ?? 0) + 1}–${f.last + 1} 天`
+  return `${s.task.title} · ${s.totalDays} 天`
+}
+
 function SpanRows({ dates, spans }: { dates: string[]; spans: SpanRange[] }): React.JSX.Element | null {
   const hot = useStore((s) => s.hotSpan)
   const setHotSpan = useStore((s) => s.setHotSpan)
   const first = dates[0]
   const last = dates[dates.length - 1]
   const inRow = spans.filter((s) => s.e >= first && s.s <= last)
-  const short = inRow.filter((s) => s.totalDays <= 7)
-  const long = inRow.filter((s) => s.totalDays > 7)
+  // 一周以内、有终点的画大框；一周以上或没有终点的并进合并线
+  const short = inRow.filter((s) => !s.open && s.totalDays <= 7)
+  const long = inRow.filter((s) => s.open || s.totalDays > 7)
   const shown = short.slice(0, 3)
   const more = short.length - shown.length
-  const counts = dates.map((d) => long.filter((s) => d >= s.s && d <= s.e).length)
-  const hotDays = (d: string): boolean => {
-    const s = inRow.find((x) => x.key === hot)
-    return !!s && d >= s.s && d <= s.e
-  }
-  if (!shown.length && !counts.some((c) => c)) return null
+  // 合并线按把握计数：确定的日子算 1 件，渐隐区里只算零点几件
+  const counts = dates.map((d) => long.reduce((n, s) => (d >= s.s && d <= s.e ? n + surenessOn(s, d) : n), 0))
+  const hotSpan = inRow.find((x) => x.key === hot)
+  const hotOn = (d: string): number => (hotSpan && d >= hotSpan.s && d <= hotSpan.e ? surenessOn(hotSpan, d) : 0)
+  if (!shown.length && !counts.some((c) => lineAlpha(c) > 0)) return null
   return (
     <div className="spanrows">
       {shown.map((s) => {
@@ -38,10 +65,10 @@ function SpanRows({ dates, spans }: { dates: string[]; spans: SpanRange[] }): Re
           <div key={s.key} className="spanrow">
             <span
               className={cx('spanbox', s.s < first && 'cut-l', s.e > last && 'cut-r', s.done && 'done', hot === s.key && 'hot')}
-              style={{ gridColumn: `${a + 1} / span ${Math.max(1, z - a + 1)}` }}
+              style={{ gridColumn: `${a + 1} / span ${Math.max(1, z - a + 1)}`, ...boxMask(s, dates.slice(a, z + 1)) }}
               onMouseEnter={() => setHotSpan(s.key)}
               onMouseLeave={() => setHotSpan(null)}
-              title={`${s.task.title} · ${s.totalDays} 天`}
+              title={spanTitle(s)}
             >
               {s.task.title}
             </span>
@@ -49,11 +76,18 @@ function SpanRows({ dates, spans }: { dates: string[]; spans: SpanRange[] }): Re
         )
       })}
       {more > 0 && <div className="spanmore tnum">还有 {more} 项</div>}
-      {counts.some((c) => c > 0) && (
-        <div className="spanline" title={long.map((s) => s.task.title).join('、')}>
-          {counts.map((c, i) => (
-            <i key={dates[i]} className={cx(`lv${Math.min(4, c)}`, hotDays(dates[i]) && 'hot')} />
-          ))}
+      {counts.some((c) => lineAlpha(c) > 0) && (
+        <div className="spanline" title={long.map(spanTitle).join('\n')}>
+          {counts.map((c, i) => {
+            const h = hotOn(dates[i])
+            return (
+              <i
+                key={dates[i]}
+                className={cx(h > 0 && 'hot')}
+                style={h > 0 ? { opacity: Math.max(0.15, h) } : ({ '--a': lineAlpha(c).toFixed(3) } as React.CSSProperties)}
+              />
+            )
+          })}
         </div>
       )}
     </div>

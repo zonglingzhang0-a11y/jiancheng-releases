@@ -216,15 +216,19 @@ function sampleTasks(): Task[] {
     mk({ title: '出差 · 杭州', date: addDays(today, -1), allDay: true, days: 2, icon: 'Plane' }),
     mk({ title: '考试周', date: addDays(today, -5), allDay: true, days: 11 }),
     mk({ title: '健身打卡 21 天', date: addDays(today, -12), allDay: true, days: 20 }),
-    mk({ title: '装修', date: addDays(today, -19), allDay: true, days: 29 }),
-    mk({ title: '读完《认知设计》', date: addDays(today, -10), allDay: true, days: 30 }),
+    // 说不准的：过了预计还没结束、没有结束日期、预计区间、开始说不准
+    mk({ title: '装修', date: addDays(today, -30), allDay: true, days: 20, endMode: 'range', daysMax: 26 }),
+    mk({ title: '读完《认知设计》', date: addDays(today, -10), allDay: true, endMode: 'open' }),
+    mk({ title: '论文初稿', date: addDays(today, -3), allDay: true, days: 9, endMode: 'range', daysMax: 17 }),
+    mk({ title: '请病假', date: addDays(today, -1), allDay: true, days: 2, endMode: 'range', daysMax: 4 }),
+    mk({ title: '搬家', date: addDays(today, -1), allDay: true, days: 6, endMode: 'range', daysMax: 8, startMax: 4 }),
     mk({ title: '国庆假期', date: addDays(today, 11), allDay: true, days: 6 }),
     mk({ title: '回复设计稿意见', date: addDays(today, -1), icon: 'PenTool' })
   ]
 }
 
 export function createMockApi(): Api {
-  const STORAGE = 'jc.mock.data.v3'
+  const STORAGE = 'jc.mock.data.v4'
   let data: AppData
   try {
     data = JSON.parse(localStorage.getItem(STORAGE) ?? '') as AppData
