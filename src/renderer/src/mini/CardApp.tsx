@@ -31,7 +31,7 @@ export function CardApp(): React.JSX.Element | null {
         onClose={() => api().closeCard()}
         onAction={(a) => {
           if (a.type === 'open') api().showMain({ view: 'today' })
-          else if (a.type === 'add') api().showMain({ create: true })
+          else if (a.type === 'add') api().showPanelNearCard()
           else api().showMain({ taskId: a.taskId, date: a.date })
         }}
       />

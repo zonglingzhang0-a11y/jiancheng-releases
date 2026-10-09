@@ -385,6 +385,7 @@ export function createMockApi(): Api {
       listeners.navigate.forEach((cb) => cb(nav ?? {}))
     },
     hidePanel: async () => undefined,
+    showPanelNearCard: async () => undefined,
     setTitleBarTone: async () => undefined,
     getUpdate: async () => ({ state: 'latest', current: __APP_VERSION__, checkedAt: Date.now() }),
     checkUpdate: async () => undefined,

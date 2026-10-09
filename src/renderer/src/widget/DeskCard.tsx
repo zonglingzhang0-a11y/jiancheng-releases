@@ -61,12 +61,16 @@ function useFloaters(opts: {
   gravity: boolean
   speed: number
   paused: boolean
+  /** 鼠标在上面时，漂着的慢慢停下，好点中 */
+  hold?: boolean
 }): Map<string, HTMLElement> {
   const world = useRef(new World()).current
   const els = useRef(new Map<string, HTMLElement>()).current
   const [size, setSize] = useState({ w: 0, h: 0 })
   const mul = useRef(1)
   mul.current = opts.paused ? 0 : opts.speed
+  const hold = useRef(false)
+  hold.current = !!opts.hold
 
   useLayoutEffect(() => {
     const el = opts.box.current
@@ -108,7 +112,7 @@ function useFloaters(opts: {
   useEffect(
     () =>
       runLoop(
-        (T) => world.step(T, mul.current),
+        (T) => world.step(T, mul.current, hold.current),
         () => {
           for (const b of world.bodies) {
             const el = els.get(b.id)
@@ -128,6 +132,11 @@ export function DeskCard(props: Props): React.JSX.Element {
   const poolRef = useRef<HTMLDivElement>(null)
   const tlRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState(false)
+  const [ribHover, setRibHover] = useState(false)
+  /** 鼠标停在哪个小圆点上：在它上方冒出名字 */
+  const [tipKey, setTipKey] = useState<string | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+  const midRef = useRef<HTMLDivElement>(null)
   const [tlH, setTlH] = useState(0)
   const { min: m, today } = useNowMin()
   const items = useMemo(() => dayItems(data, progress, today), [data, progress, today])
@@ -159,7 +168,8 @@ export function DeskCard(props: Props): React.JSX.Element {
     shelf: [4, 3],
     gravity: look.gravity,
     speed: look.floatSpeed,
-    paused
+    paused,
+    hold: ribHover
   })
   const pillEls = useFloaters({
     box: poolRef,
@@ -172,6 +182,28 @@ export function DeskCard(props: Props): React.JSX.Element {
     speed: look.floatSpeed,
     paused
   })
+
+  // 名字气泡跟着小圆点走（圆点停下前还会滑一小段）
+  useEffect(() => {
+    if (!tipKey) return
+    let raf = 0
+    const follow = (): void => {
+      const dot = dotEls.get(tipKey)
+      const tip = tipRef.current
+      const box = midRef.current
+      if (dot && tip && box) {
+        const d = dot.getBoundingClientRect()
+        const b = box.getBoundingClientRect()
+        const x = Math.max(tip.offsetWidth / 2, Math.min(b.width - tip.offsetWidth / 2, d.left + d.width / 2 - b.left))
+        tip.style.left = `${x}px`
+        tip.style.top = `${d.top - b.top - tip.offsetHeight - 6}px`
+        tip.style.opacity = '1'
+      }
+      raf = requestAnimationFrame(follow)
+    }
+    follow()
+    return () => cancelAnimationFrame(raf)
+  }, [tipKey, dotEls])
 
   const cur = timed.find((i) => !i.done && i.start! <= m && m < i.end!)
   const upcoming = timed.filter((i) => !i.done && i.start! > m)
@@ -250,8 +282,9 @@ export function DeskCard(props: Props): React.JSX.Element {
     )
   } else if (size === 'm') {
     const nx = cur ? upcoming.slice(0, 2) : upcoming.slice(1, 3)
+    const tipItem = tipKey ? floats.find((f) => f.key === tipKey) : undefined
     body = (
-      <div className="wg-m">
+      <div className="wg-m" ref={midRef}>
         <div className={cx('wm-top', props.windowed && 'drag')}>
           <span className="wg-cap">
             {d.getMonth() + 1}月{d.getDate()}日 {WEEKDAY[d.getDay()]} · {lunar(d)}
@@ -266,7 +299,16 @@ export function DeskCard(props: Props): React.JSX.Element {
           </div>
           {doneBtn}
         </div>
-        <div className="wm-rib" ref={ribRef} style={{ background: grad }}>
+        <div
+          className="wm-rib"
+          ref={ribRef}
+          style={{ background: grad }}
+          onPointerEnter={() => setRibHover(true)}
+          onPointerLeave={() => {
+            setRibHover(false)
+            setTipKey(null)
+          }}
+        >
           <i className="pst" style={{ width: `${xOf(m) * 100}%` }} />
           {timed.map((i) => (
             <i key={i.key} className={cx('b', i.done && 'done', i === cur && 'cur')} style={{ left: `${xOf(i.start!) * 100}%`, width: `calc(${(xOf(i.end!) - xOf(i.start!)) * 100}% - 2px)` }} />
@@ -279,11 +321,25 @@ export function DeskCard(props: Props): React.JSX.Element {
                 if (el) dotEls.set(f.key, el)
                 else dotEls.delete(f.key)
               }}
-              className={cx('fdot', f.done && 'done')}
-              title={f.task.title}
+              className={cx('fdot no-drag', f.done && 'done', tipKey === f.key && 'on')}
+              role="button"
+              aria-label={`${f.task.title}，${f.done ? '已完成' : '点一下完成'}`}
+              onPointerEnter={() => setTipKey(f.key)}
+              onPointerLeave={() => setTipKey((k) => (k === f.key ? null : k))}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!f.done) burstAt(e)
+                props.onToggle(f)
+              }}
             />
           ))}
         </div>
+        {tipItem && (
+          <div className="wm-tip" ref={tipRef} style={{ opacity: 0 }}>
+            <b>{tipItem.task.title}</b>
+            <span>{tipItem.done ? '已完成 · 再点取消' : '点一下完成'}</span>
+          </div>
+        )}
         <div className="wm-axis tnum">
           {[6, 12, 18, 24].map((h) => (
             <span key={h} style={{ left: `${xOf(h * 60) * 100}%` }}>

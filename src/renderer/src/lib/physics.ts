@@ -163,13 +163,14 @@ export class World {
     }
   }
 
-  step(T: number, mul: number): void {
+  /** hold：漂着的慢慢停下（方便鼠标点中），已完成的照常挪到左下角 */
+  step(T: number, mul: number, hold = false): void {
     this.shelve()
     for (const b of this.bodies) {
       if (b.mode === 'held') continue
       if (b.mode === 'drift') {
         // 巡航：只把速度大小慢慢拉回设定值，方向完全由碰撞决定
-        const target = b.cruise * mul
+        const target = hold ? 0 : b.cruise * mul
         const v = Math.hypot(b.vx, b.vy)
         if (target <= 0) {
           b.vx *= 0.94

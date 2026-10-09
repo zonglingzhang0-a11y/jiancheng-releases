@@ -109,6 +109,28 @@ export class QuickPanel {
     win.focus()
     win.webContents.send('panel:shown')
   }
+
+  /** 桌角卡片的「＋」：贴着卡片弹出。卡片在屏幕右半边就放在它左边，否则放右边，底边对齐 */
+  toggleNear(card: Rectangle): void {
+    this.create()
+    if (this.visible) return this.hide()
+    // 面板开着时点「＋」：先失焦隐藏，再触发点击，此时不应重新打开
+    if (Date.now() - this.hiddenAt < 300) return
+    const win = this.win!
+    const { width: W, height: H } = PANEL_SIZE
+    const wa = screen.getDisplayMatching(card).workArea
+    // 卡片窗口四周留了画阴影的透明边距，按卡片本身算
+    const c = { x: card.x + SHADOW, y: card.y + SHADOW, width: card.width - SHADOW * 2, height: card.height - SHADOW * 2 }
+    const gap = 6
+    const onRight = c.x + c.width / 2 > wa.x + wa.width / 2
+    let x = onRight ? c.x - gap - W : c.x + c.width + gap
+    if (x < wa.x || x + W > wa.x + wa.width) x = clamp(c.x + c.width - W, wa.x, wa.x + wa.width - W)
+    const y = clamp(c.y + c.height - H, wa.y, wa.y + wa.height - H)
+    win.setBounds({ x: Math.round(x), y: Math.round(y), width: W, height: H })
+    win.show()
+    win.focus()
+    win.webContents.send('panel:shown')
+  }
 }
 
 /* ================= 桌角卡片 ================= */

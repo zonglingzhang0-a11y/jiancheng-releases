@@ -308,6 +308,8 @@ export interface Api {
   /** 显示主窗口并跳转 */
   showMain(nav?: NavTarget): Promise<void>
   hidePanel(): Promise<void>
+  /** 桌角卡片的「＋」：在卡片旁边弹出快捷面板 */
+  showPanelNearCard(): Promise<void>
   setCard(patch: Partial<CardSettings>): Promise<void>
   getUpdate(): Promise<UpdateStatus>
   checkUpdate(): Promise<void>

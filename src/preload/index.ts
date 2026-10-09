@@ -38,6 +38,7 @@ const api: Api = {
   onShot: subscribe('shot'),
   showMain: (nav) => ipcRenderer.invoke('app:showMain', nav),
   hidePanel: () => ipcRenderer.invoke('panel:hide'),
+  showPanelNearCard: () => ipcRenderer.invoke('panel:nearCard'),
   setCard: (patch) => ipcRenderer.invoke('card:set', patch),
   closeCard: () => ipcRenderer.invoke('card:close'),
   setTitleBarTone: (tone) => ipcRenderer.invoke('titlebar:tone', tone),

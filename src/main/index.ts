@@ -373,6 +373,10 @@ function registerIpc(): void {
     showWindow(nav)
   })
   ipcMain.handle('panel:hide', () => panel.hide())
+  ipcMain.handle('panel:nearCard', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win) panel.toggleNear(win.getBounds())
+  })
   ipcMain.handle('titlebar:tone', (e, tone: TitleBarTone) => {
     const w = BrowserWindow.fromWebContents(e.sender)
     if (w && w === win && !w.isDestroyed()) w.setTitleBarOverlay(TITLE_BAR_TONES[tone] ?? TITLE_BAR)
