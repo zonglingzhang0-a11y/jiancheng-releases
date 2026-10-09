@@ -1,119 +1,89 @@
-// 生成应用图标与托盘图标（纯 Node 实现，无第三方依赖）
-// 用法：node scripts/gen-icons.cjs
+// 生成应用图标、托盘图标和宣传用大图：用 Electron 按真实像素把 resources/icon-src 里的 SVG 画出来
+// 用法：npm run icons            生成 resources/ 下的图标文件
+//      npm run icons -- <目录>   另外把每个尺寸的 PNG 存到这个目录，方便检查
+const { app, BrowserWindow } = require('electron')
 const fs = require('fs')
 const path = require('path')
-const zlib = require('zlib')
 
-const CRC_TABLE = new Uint32Array(256).map((_, n) => {
-  let c = n
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
-  return c >>> 0
-})
-const crc32 = (buf) => {
-  let c = 0xffffffff
-  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8)
-  return (c ^ 0xffffffff) >>> 0
+const ROOT = path.join(__dirname, '..')
+const SRC = path.join(ROOT, 'resources', 'icon-src')
+const OUT = path.join(ROOT, 'resources')
+
+/** 每个尺寸用哪一版：16 像素按 16 格单独画；20–24 用裁到地平线的特写；32 以上用完整画面 */
+const APP = { 16: 'crop16', 20: 'crop', 24: 'crop', 32: 'night', 40: 'night', 48: 'night', 64: 'night', 96: 'night', 128: 'night', 256: 'night' }
+const TRAY_LIGHT = { 16: 'glyph-light16', 20: 'glyph-light', 24: 'glyph-light', 32: 'glyph-light', 40: 'glyph-light', 48: 'glyph-light' }
+const TRAY_DARK = { 16: 'glyph-dark16', 20: 'glyph-dark', 24: 'glyph-dark', 32: 'glyph-dark', 40: 'glyph-dark', 48: 'glyph-dark' }
+
+/** 把几张 PNG 装进一个 .ico（Vista 起支持 PNG 格式的图标项） */
+function ico(entries) {
+  const head = Buffer.alloc(6)
+  head.writeUInt16LE(0, 0)
+  head.writeUInt16LE(1, 2)
+  head.writeUInt16LE(entries.length, 4)
+  const dir = Buffer.alloc(16 * entries.length)
+  let offset = 6 + dir.length
+  entries.forEach(({ size, png }, i) => {
+    const o = i * 16
+    dir[o] = size >= 256 ? 0 : size
+    dir[o + 1] = size >= 256 ? 0 : size
+    dir.writeUInt16LE(1, o + 4)
+    dir.writeUInt16LE(32, o + 6)
+    dir.writeUInt32LE(png.length, o + 8)
+    dir.writeUInt32LE(offset, o + 12)
+    offset += png.length
+  })
+  return Buffer.concat([head, dir, ...entries.map((e) => e.png)])
 }
-const chunk = (type, data) => {
-  const len = Buffer.alloc(4)
-  len.writeUInt32BE(data.length)
-  const body = Buffer.concat([Buffer.from(type), data])
-  const crc = Buffer.alloc(4)
-  crc.writeUInt32BE(crc32(body))
-  return Buffer.concat([len, body, crc])
-}
-function png(size, rgba) {
-  const header = Buffer.alloc(13)
-  header.writeUInt32BE(size, 0)
-  header.writeUInt32BE(size, 4)
-  header[8] = 8
-  header[9] = 6
-  const raw = Buffer.alloc((size * 4 + 1) * size)
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0
-    rgba.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4)
+
+app.commandLine.appendSwitch('force-device-scale-factor', '1')
+app.whenReady().then(async () => {
+  const preview = process.argv.slice(2).find((a) => !a.startsWith('-') && !a.endsWith('.cjs') && a !== '.')
+  const win = new BrowserWindow({ show: false, width: 300, height: 300, webPreferences: { offscreen: true } })
+  await win.loadURL('data:text/html,<canvas></canvas>')
+  const svgs = Object.fromEntries(fs.readdirSync(SRC).filter((f) => f.endsWith('.svg')).map((f) => [f.slice(0, -4), fs.readFileSync(path.join(SRC, f), 'utf8')]))
+  /** 在页面里把 SVG 画到 size×size 的画布上，取回 PNG */
+  const render = async (name, size) => {
+    const url = await win.webContents.executeJavaScript(`new Promise((ok, fail) => {
+      const img = new Image()
+      img.onload = () => {
+        const c = document.createElement('canvas')
+        c.width = c.height = ${size}
+        const g = c.getContext('2d')
+        g.imageSmoothingQuality = 'high'
+        g.drawImage(img, 0, 0, ${size}, ${size})
+        ok(c.toDataURL('image/png'))
+      }
+      img.onerror = () => fail(new Error('无法解析 ${name}.svg'))
+      img.src = 'data:image/svg+xml;base64,' + ${JSON.stringify(Buffer.from(svgs[name]).toString('base64'))}
+    })`)
+    return Buffer.from(url.split(',')[1], 'base64')
   }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', header),
-    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
-    chunk('IEND', Buffer.alloc(0))
-  ])
-}
-
-const sdRoundRect = (px, py, x, y, w, h, r) => {
-  const cx = x + w / 2
-  const cy = y + h / 2
-  const qx = Math.abs(px - cx) - w / 2 + r
-  const qy = Math.abs(py - cy) - h / 2 + r
-  return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - r
-}
-// eslint-disable-next-line no-unused-vars
-const sdSegment = (px, py, ax, ay, bx, by) => {
-  const pax = px - ax
-  const pay = py - ay
-  const bax = bx - ax
-  const bay = by - ay
-  const h = Math.max(0, Math.min(1, (pax * bax + pay * bay) / (bax * bax + bay * bay)))
-  return Math.hypot(pax - bax * h, pay - bay * h)
-}
-
-/**
- * 在 24×24 设计坐标系中绘制，pad 为四周留白（设计单位）
- * 2.0 图标：墨色底，一条白天近白、夜里浅灰的色带，竖线是「现在」，上方一颗漂浮的待办
- */
-function render(size, { pad = 0, radius = 7 } = {}) {
-  const buf = Buffer.alloc(size * size * 4)
-  const SS = 4
-  const span = 24 + pad * 2
-  const INK = [0x17, 0x18, 0x1b]
-  const small = size <= 32
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let r = 0
-      let g = 0
-      let b = 0
-      let a = 0
-      for (let sy = 0; sy < SS; sy++) {
-        for (let sx = 0; sx < SS; sx++) {
-          const u = ((x + (sx + 0.5) / SS) / size) * span - pad
-          const v = ((y + (sy + 0.5) / SS) / size) * span - pad
-          if (sdRoundRect(u, v, 0, 0, 24, 24, radius) > 0) continue
-          let c = INK
-          // 色带：左边白天近白，右边入夜变浅灰
-          const band = small ? sdRoundRect(u, v, 3, 10, 18, 6, 2.2) : sdRoundRect(u, v, 3.2, 10.4, 17.6, 5.2, 2)
-          if (band <= 0) {
-            const t = Math.max(0, Math.min(1, (u - 13) / 5))
-            const lv = 250 - t * 40
-            c = [lv, lv, lv - 1]
-            // 贴在色带上的日程块
-            if (sdRoundRect(u, v, small ? 9 : 9.4, small ? 11.6 : 11.7, small ? 5.5 : 4.6, small ? 2.8 : 2.6, small ? 1 : 0.9) <= 0) c = [120, 124, 132]
-          }
-          // 漂浮的待办
-          if (Math.hypot(u - (small ? 7.5 : 8), v - (small ? 6.2 : 6.9)) <= (small ? 2.1 : 1.7)) c = [250, 250, 249]
-          if (!small && Math.hypot(u - 16.6, v - 18.6) <= 1.3) c = [150, 154, 162]
-          r += c[0]
-          g += c[1]
-          b += c[2]
-          a += 1
-        }
-      }
-      const i = (y * size + x) * 4
-      const n = SS * SS
-      if (a) {
-        buf[i] = Math.round(r / a)
-        buf[i + 1] = Math.round(g / a)
-        buf[i + 2] = Math.round(b / a)
-      }
-      buf[i + 3] = Math.round((a / n) * 255)
+  const build = async (map, file) => {
+    const entries = []
+    for (const [size, name] of Object.entries(map)) {
+      const png = await render(name, Number(size))
+      entries.push({ size: Number(size), png })
+      if (preview) fs.writeFileSync(path.join(preview, `${path.basename(file, '.ico')}-${size}.png`), png)
     }
+    fs.writeFileSync(path.join(OUT, file), ico(entries))
+    console.log('✓', file, Object.keys(map).join(' / '))
   }
-  return png(size, buf)
-}
 
-const out = path.join(__dirname, '..', 'resources')
-fs.mkdirSync(out, { recursive: true })
-fs.writeFileSync(path.join(out, 'icon.png'), render(512, { pad: 1.7, radius: 6 }))
-fs.writeFileSync(path.join(out, 'tray.png'), render(16, { radius: 5.5 }))
-fs.writeFileSync(path.join(out, 'tray@2x.png'), render(32, { radius: 5.5 }))
-console.log('icons written to', out)
+  if (preview) fs.mkdirSync(preview, { recursive: true })
+  await build(APP, 'icon.ico')
+  await build(TRAY_LIGHT, 'tray-light.ico')
+  await build(TRAY_DARK, 'tray-dark.ico')
+  // 窗口图标和安装包用的大图
+  fs.writeFileSync(path.join(OUT, 'icon.png'), await render('night', 512))
+  console.log('✓ icon.png 512')
+  // 视频和宣传图用：黄昏（长庚）与清晨（启明）两张大图
+  const promo = path.join(ROOT, 'video', 'public')
+  fs.mkdirSync(promo, { recursive: true })
+  fs.writeFileSync(path.join(promo, 'icon-dusk.png'), await render('night', 1024))
+  fs.writeFileSync(path.join(promo, 'icon-dawn.png'), await render('dawn', 1024))
+  console.log('✓ video/public/icon-dusk.png、icon-dawn.png 1024')
+  if (preview) {
+    for (const n of ['night', 'dawn']) fs.writeFileSync(path.join(preview, `${n}-256.png`), await render(n, 256))
+  }
+  app.quit()
+})

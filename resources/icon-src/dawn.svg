@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 清晨版：同一片风景，太阳刚露头，星点挪到左上角成为启明星（与长庚星同为金星）。用在视频与宣传图 -->
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#b9babd"/><stop offset=".55" stop-color="#e4e4e3"/><stop offset="1" stop-color="#fbfbfa"/></linearGradient>
+    <linearGradient id="gd" x1="0" x2="0" y1="15.2" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#43444a"/><stop offset="1" stop-color="#0b0b0c"/></linearGradient>
+    <radialGradient id="glow"><stop offset=".3" stop-color="#fafaf9" stop-opacity=".9"/><stop offset="1" stop-color="#fafaf9" stop-opacity="0"/></radialGradient>
+    <clipPath id="rr"><rect width="24" height="24" rx="7"/></clipPath>
+  </defs>
+  <g clip-path="url(#rr)">
+    <rect width="24" height="24" fill="url(#sky)"/>
+    <rect x="3.4" y="9.8" width="11.5" height="1.05" rx=".5" fill="#fafaf9" opacity=".55"/>
+    <rect x="9.6" y="11.9" width="10.8" height=".85" rx=".42" fill="#fafaf9" opacity=".4"/>
+    <circle cx="12" cy="15.2" r="8.6" fill="url(#glow)"/>
+    <circle cx="12" cy="17.4" r="4.6" fill="#fafaf9"/>
+    <rect y="15.2" width="24" height="8.8" fill="url(#gd)"/>
+    <rect y="17.8" width="24" height=".55" fill="#fafaf9" opacity=".35"/>
+  </g>
+  <circle cx="5.8" cy="6.2" r="1.35" fill="#17181b"/>
+</svg>

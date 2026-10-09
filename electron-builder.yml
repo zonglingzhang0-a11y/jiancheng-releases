@@ -12,16 +12,19 @@ asarUnpack:
   - node_modules/koffi/**
   - node_modules/@koromix/**
 extraResources:
-  - from: resources/tray.png
-    to: tray.png
-  - from: resources/tray@2x.png
-    to: tray@2x.png
+  - from: resources/tray-light.ico
+    to: tray-light.ico
+  - from: resources/tray-dark.ico
+    to: tray-dark.ico
+  - from: resources/icon.ico
+    to: icon.ico
   - from: resources/icon.png
     to: icon.png
   - from: resources/THIRD_PARTY_NOTICES.txt
     to: THIRD_PARTY_NOTICES.txt
 win:
-  icon: resources/icon.png
+  # 16–24 像素用裁到地平线的特写，32 以上用完整画面；由 npm run icons 从 resources/icon-src 生成
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -36,7 +39,7 @@ nsis:
   createStartMenuShortcut: true
   deleteAppDataOnUninstall: false
 npmRebuild: false
-# 自动更新：安装包发布到 GitHub 上只放安装包的公开仓库（源码不公开）
+# 自动更新：安装包发布到 GitHub 仓库的 Releases（源码也在同一个仓库，MIT 开源）
 publish:
   provider: github
   owner: zonglingzhang0-a11y

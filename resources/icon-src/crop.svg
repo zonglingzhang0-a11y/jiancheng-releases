@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 小尺寸（20–24 像素）的应用图标：裁到地平线附近放大，太阳和星更大 -->
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#17181b"/><stop offset=".6" stop-color="#2f3035"/><stop offset="1" stop-color="#6f7076"/></linearGradient>
+    <linearGradient id="gd" x1="0" x2="0" y1="14" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#43444a"/><stop offset="1" stop-color="#0b0b0c"/></linearGradient>
+    <radialGradient id="glow"><stop offset=".3" stop-color="#9a9ba1" stop-opacity=".5"/><stop offset="1" stop-color="#9a9ba1" stop-opacity="0"/></radialGradient>
+    <clipPath id="rr"><rect width="24" height="24" rx="6"/></clipPath>
+  </defs>
+  <g clip-path="url(#rr)">
+    <rect width="24" height="24" fill="url(#sky)"/>
+    <circle cx="12" cy="14" r="11" fill="url(#glow)"/>
+    <circle cx="12" cy="14" r="7" fill="#c9cacc"/>
+    <rect y="14" width="24" height="10" fill="url(#gd)"/>
+    <rect y="18" width="24" height="1" fill="#fafaf9" opacity=".3"/>
+  </g>
+  <circle cx="19.5" cy="4.5" r="2.1" fill="#fafaf9"/>
+</svg>

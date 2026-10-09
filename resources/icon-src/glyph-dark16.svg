@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- 托盘单色符号 · 深色任务栏 · 16 像素专用：太阳升高，露出大半个 -->
+  <path d="M4.53 10.5 A3.9 3.9 0 1 1 11.47 10.5" fill="none" stroke="#ffffff" stroke-width="1.4"/>
+  <line x1="1.5" y1="10.5" x2="14.5" y2="10.5" stroke="#ffffff" stroke-width="1"/>
+  <line x1="4" y1="13.5" x2="12" y2="13.5" stroke="#ffffff" stroke-width="1" opacity=".5"/>
+  <circle cx="12.8" cy="4" r="1.45" fill="#ffffff"/>
+</svg>

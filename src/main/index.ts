@@ -12,6 +12,7 @@ import { Capturer } from './capture'
 import { broadcast, DeskCard, loadRoute, QuickPanel, registerHotkey } from './windows'
 import { Updater } from './updater'
 import { APP_ID, APP_NAME, DATA_DIR } from './channel'
+import { win32 } from './win32'
 
 const SHOT_SCHEME = 'jc-shot'
 const startHidden = process.argv.includes('--hidden')
@@ -105,7 +106,7 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     title: APP_NAME,
-    icon: resource('icon.png'),
+    icon: resource('icon.ico'),
     backgroundColor: TITLE_BAR.color,
     titleBarStyle: 'hidden',
     titleBarOverlay: TITLE_BAR,
@@ -259,12 +260,28 @@ function listSystemFonts(): Promise<{ family: string; label: string }[]> {
   return systemFonts
 }
 
+/** 托盘图标跟着任务栏深浅换：浅色任务栏用深色符号，深色任务栏（Windows 10 默认）用浅色符号 */
+let trayOnLight: boolean | null = null
+function trayImage(light: boolean): Electron.NativeImage {
+  // .ico 里有 16–48 像素各一张，系统按缩放比例自己挑
+  return nativeImage.createFromPath(resource(light ? 'tray-light.ico' : 'tray-dark.ico'))
+}
+function refreshTrayIcon(): void {
+  const light = win32?.taskbarLight() ?? false
+  if (!tray || light === trayOnLight) return
+  trayOnLight = light
+  tray.setImage(trayImage(light))
+}
+
 function createTray(): void {
-  // 同目录下的 tray@2x.png 会被自动用于高分屏
-  tray = new Tray(nativeImage.createFromPath(resource('tray.png')))
+  trayOnLight = win32?.taskbarLight() ?? false
+  tray = new Tray(trayImage(trayOnLight))
   tray.on('click', () => panel.toggle('tray', tray))
   tray.on('double-click', () => showWindow())
   updateTray()
+  // 切换「Windows 模式」时系统不一定通知到，隔一会儿看一眼注册表（只读一个数，几乎不花时间）
+  nativeTheme.on('updated', refreshTrayIcon)
+  setInterval(refreshTrayIcon, 20_000)
 }
 
 function registerIpc(): void {

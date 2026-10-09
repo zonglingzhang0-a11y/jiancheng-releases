@@ -10,6 +10,7 @@ import { Sheet } from './editor/Sheet'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShotViewer } from './components/ShotViewer'
+import brandMark from '../../../resources/icon-src/crop16.svg?url'
 import { Toast } from './components/Toast'
 import { cx } from './components/ui'
 
@@ -27,7 +28,7 @@ function TitleBar(): React.JSX.Element {
   return (
     <header className="titlebar drag">
       <span className="brand">
-        <i className="brand-mark" />
+        <img className="brand-mark" src={brandMark} alt="" draggable={false} />
         简程
         {IS_TEST_BUILD && !isMock() && <span className="brand-test">测试版</span>}
       </span>

@@ -17,7 +17,7 @@
     "beta": "node scripts/build.cjs beta",
     "dist": "node scripts/build.cjs dist",
     "release": "node scripts/build.cjs release",
-    "icons": "node scripts/gen-icons.cjs"
+    "icons": "electron scripts/gen-icons.cjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- 托盘单色符号 · 浅色任务栏 · 16 像素专用：横线落在整像素行上 -->
+  <path d="M4 9.5 A4 4 0 0 1 12 9.5" fill="none" stroke="#1b1b1b" stroke-width="1.4"/>
+  <line x1="1.5" y1="9.5" x2="14.5" y2="9.5" stroke="#1b1b1b" stroke-width="1"/>
+  <line x1="4" y1="12.5" x2="12" y2="12.5" stroke="#1b1b1b" stroke-width="1" opacity=".5"/>
+  <circle cx="12.8" cy="4" r="1.45" fill="#1b1b1b"/>
+</svg>

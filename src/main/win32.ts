@@ -23,6 +23,8 @@ interface Bindings {
   describe(path: string): string | null
   /** 把窗口放到所有普通窗口之下（「贴在桌面」），不激活 */
   sendToBottom(hwnd: Buffer): void
+  /** 任务栏是不是浅色（系统设置里「Windows 模式」）；读不到时返回 null */
+  taskbarLight(): boolean | null
 }
 
 function load(): Bindings | null {
@@ -58,6 +60,10 @@ function load(): Bindings | null {
     )
     const VerQueryValueW = version.func('bool __stdcall VerQueryValueW(uint8_t* block, str16 sub, _Out_ void** buf, _Out_ uint32_t* len)')
     const SetWindowPos = user32.func('bool __stdcall SetWindowPos(intptr_t hWnd, intptr_t after, int x, int y, int cx, int cy, uint32_t flags)')
+    const advapi32 = koffi.load('advapi32.dll')
+    const RegGetValueW = advapi32.func(
+      'int32_t __stdcall RegGetValueW(intptr_t hkey, str16 sub, str16 value, uint32_t flags, _Out_ uint32_t* type, _Out_ uint32_t* data, _Inout_ uint32_t* size)'
+    )
 
     const titleBuf = Buffer.alloc(1024)
     const pathBuf = Buffer.alloc(2048)
@@ -108,6 +114,12 @@ function load(): Bindings | null {
         // HWND_BOTTOM = 1；SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
         const h = hwnd.length >= 8 ? hwnd.readBigInt64LE(0) : BigInt(hwnd.readInt32LE(0))
         SetWindowPos(h, 1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+      },
+      taskbarLight() {
+        const data = [0]
+        // HKEY_CURRENT_USER（0x80000001，按 64 位句柄符号扩展）；RRF_RT_REG_DWORD
+        const r = RegGetValueW(-0x7fffffff, 'Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', 'SystemUsesLightTheme', 0x10, [0], data, [4])
+        return r === 0 ? data[0] !== 0 : null
       },
       idleMs() {
         const info = { cbSize: 8, dwTime: 0 }

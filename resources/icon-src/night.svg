@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 主图标：黄昏余晖落日 · 远近两段地（渐变 + 细亮边）· 两条云带 · 右上长庚星 -->
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#17181b"/><stop offset=".6" stop-color="#2f3035"/><stop offset="1" stop-color="#6f7076"/></linearGradient>
+    <linearGradient id="gd" x1="0" x2="0" y1="15.2" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#43444a"/><stop offset="1" stop-color="#0b0b0c"/></linearGradient>
+    <radialGradient id="glow"><stop offset=".3" stop-color="#9a9ba1" stop-opacity=".5"/><stop offset="1" stop-color="#9a9ba1" stop-opacity="0"/></radialGradient>
+    <clipPath id="rr"><rect width="24" height="24" rx="7"/></clipPath>
+  </defs>
+  <g clip-path="url(#rr)">
+    <rect width="24" height="24" fill="url(#sky)"/>
+    <rect x="3.4" y="9.8" width="11.5" height="1.05" rx=".5" fill="#fafaf9" opacity=".22"/>
+    <rect x="9.6" y="11.9" width="10.8" height=".85" rx=".42" fill="#fafaf9" opacity=".16"/>
+    <circle cx="12" cy="15.2" r="8.2" fill="url(#glow)"/>
+    <circle cx="12" cy="15.2" r="4.6" fill="#c9cacc"/>
+    <rect y="15.2" width="24" height="8.8" fill="url(#gd)"/>
+    <rect y="17.8" width="24" height=".55" fill="#fafaf9" opacity=".3"/>
+  </g>
+  <circle cx="18.2" cy="6.2" r="1.4" fill="#fafaf9"/>
+</svg>
