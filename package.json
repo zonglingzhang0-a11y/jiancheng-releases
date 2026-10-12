@@ -1,7 +1,7 @@
 {
   "name": "tempo-planner",
   "productName": "简程",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "简程 · 以今天为中心的日程规划，按应用使用情况自动完成任务",
   "main": "./out/main/index.js",
   "author": "zzl",
