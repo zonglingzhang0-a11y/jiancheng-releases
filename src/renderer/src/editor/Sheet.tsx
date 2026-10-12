@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { Maximize2, Minimize2, Plus, X, Zap } from 'lucide-react'
-import { addDays, fromKey, fromMin, tasksOn, toMin, uid } from '@shared/schedule'
+import { addDays, fromKey, fromMin, isLong, tasksOn, toMin, uid } from '@shared/schedule'
 import type { RepeatType, Task } from '@shared/types'
 import { defaultRule, useStore, type EditorState } from '../store'
 import { durationLabel, WEEKDAY, WEEKDAY_SHORT } from '../lib/dates'
@@ -67,13 +67,16 @@ const spanMinutes = (task: Task): number => (task.days ?? 0) * 1440 + toMin(task
 /** 不重复的全天 / 多天日程才能把开始、结束说成「大概」 */
 const canFuzz = (task: Task): boolean => !!task.allDay && task.repeat.type === 'none'
 
-/** 保存前去掉用不上的模糊起止字段 */
+/** 保存前去掉用不上的模糊起止、打卡字段 */
 function cleanFuzz(task: Task): Task {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { endMode, daysMax, startMax, ...rest } = task
-  if (!canFuzz(task)) return rest
+  const { endMode, daysMax, startMax, checkin, ...rest } = task
+  // 每天打卡默认开，只有关掉时才记
+  const keep = isLong(task) && checkin === false ? { checkin: false } : {}
+  if (!canFuzz(task)) return { ...rest, ...keep }
   return {
     ...rest,
+    ...keep,
     ...(endMode ? { endMode } : {}),
     ...(endMode === 'range' ? { daysMax } : {}),
     ...(startMax ? { startMax } : {})
@@ -186,7 +189,9 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
     let auto = task.auto
     if (auto && auto.scope === 'slot' && (task.allDay || !(task.start && task.end))) auto = { ...auto, scope: 'day' }
     const pending = newSub.trim() ? [...(task.subtasks ?? []), { id: uid(), title: newSub.trim(), doneOn: [] }] : task.subtasks
-    const next = cleanFuzz({ ...task, title: task.title.trim(), auto, subtasks: pending, updatedAt: Date.now() })
+    const base = { ...task, title: task.title.trim(), auto, subtasks: pending, updatedAt: Date.now() }
+    // 长期的事不重复
+    const next = cleanFuzz(multi ? { ...base, repeat: { type: 'none' as const, weekdays: [], until: null } } : base)
     saveTask(next)
     if (editor.isNew) notifyCreated(next)
     closeEditor()
@@ -233,7 +238,9 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
       set({ days: 0, end: fromMin(Math.min(1440, toMin(task.start!) + 60)) })
     } else set({ days: n })
   }
-  const repeatType = task.repeat.type
+  /** 跨两天以上的长期事：不设重复，改成「每天打卡」开关 */
+  const multi = mode === 'allday' ? days > 0 || !!task.endMode || (task.startMax ?? 0) > 0 : mode === 'timed' && spanMinutes(task) >= 1440
+  const repeatType: RepeatType = multi ? 'none' : task.repeat.type
 
   // ---- 说不准的开始和结束（不重复的全天 / 多天日程）----
   const fuzzOk = mode === 'allday' && repeatType === 'none'
@@ -410,6 +417,18 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
             )}
           </div>
 
+          {multi ? (
+            <div className="field">
+              <label>每天打卡</label>
+              <div className="fline checkin-line">
+                <Switch checked={task.checkin !== false} onChange={(on) => set({ checkin: on ? undefined : false })} />
+                <span className="checkin-note">
+                  {task.checkin !== false ? '这段时间里每天都能勾一下，记下打了几天卡' : '只显示一段时间，不用每天勾，适合出差、假期'}
+                </span>
+              </div>
+              <div className="field-hint">长期的事不设重复：每天的勾、子待办和智能完成都按天记</div>
+            </div>
+          ) : (
           <div className="field">
             <label>重复</label>
             <div className="fline">
@@ -445,6 +464,7 @@ function SheetBody({ editor, full, setFull }: { editor: EditorState; full: boole
               )}
             </div>
           </div>
+          )}
 
           <div className="field">
             <label>子待办{subs.length > 0 && <em className="tnum"> · {subs.filter((s) => s.doneOn.includes(editor.date)).length}/{subs.length}</em>}</label>

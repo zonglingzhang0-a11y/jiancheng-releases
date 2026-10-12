@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { DEFAULT_SETTINGS, type AppData, type Segment, type Settings } from '@shared/types'
+import { isMultiDay } from '@shared/schedule'
 
 const root = (): string => app.getPath('userData')
 const dataFile = (): string => join(root(), 'data.json')
@@ -29,7 +30,10 @@ export function loadData(): AppData {
   const D = DEFAULT_SETTINGS
   return {
     version: 1,
-    tasks: (raw?.tasks ?? []).map((t) => ({ ...t, exceptions: t.exceptions ?? [], notes: t.notes ?? '', subtasks: t.subtasks ?? [] })),
+    tasks: (raw?.tasks ?? [])
+      .map((t) => ({ ...t, exceptions: t.exceptions ?? [], notes: t.notes ?? '', subtasks: t.subtasks ?? [] }))
+      // 1.1 以前允许长期的事再设重复（会每天叠出一份）：去掉重复，按天的完成记录正好就是每天的打卡
+      .map((t) => (t.repeat?.type !== 'none' && isMultiDay(t) ? { ...t, repeat: { type: 'none', weekdays: [], until: null } } : t)),
     completions: raw?.completions ?? {},
     settings: {
       ...D,

@@ -38,6 +38,8 @@ export function occurrenceKey(taskId: string, date: string): string {
 
 export function occursOn(task: Task, date: string): boolean {
   if (date < task.date) return false
+  // 长期的事不重复：旧数据里设过的也按不重复算，免得每天叠出一份
+  if (isMultiDay(task)) return date === task.date && !task.exceptions.includes(date)
   const { repeat } = task
   if (repeat.until && date > repeat.until) return false
   if (task.exceptions.includes(date)) return false
@@ -127,6 +129,16 @@ export function isLong(task: Task): boolean {
   return !!r && r[1] - r[0] >= 1440
 }
 
+/** 跨两天以上的长期事（一天之内的「全天」不算）：不能重复 */
+export function isMultiDay(task: Task): boolean {
+  if (!isLong(task)) return false
+  if (!task.allDay) return true
+  return (task.days ?? 0) > 0 || !!task.endMode || (task.startMax ?? 0) > 0
+}
+
+/** 长期的事每天打卡（默认开）：每天一格，完成记录的键和「每天重复」一样是 任务@那一天 */
+export const hasCheckin = (task: Task): boolean => isLong(task) && task.checkin !== false
+
 /** 覆盖某一天的所有发生（包括前几天开始、延续到这天的），date 是那次发生开始的日期 */
 export function occurrencesOn(tasks: Task[], date: string): { task: Task; date: string }[] {
   const out: { task: Task; date: string }[] = []
@@ -173,8 +185,12 @@ export function ruleMatches(rule: AutoRule, seg: Segment): boolean {
   return false
 }
 
-/** 规则在某次发生的统计时间窗口 [from, to)：仅计划时段按日程的起止，全天按涉及的每一整天 */
-export function ruleWindow(task: Task, date: string): [number, number] {
+/**
+ * 规则在某次发生的统计时间窗口 [from, to)：仅计划时段按日程的起止，全天按涉及的每一整天；
+ * 每天打卡的长期事和「每天重复」一样，只看 day 这一天（默认今天）
+ */
+export function ruleWindow(task: Task, date: string, day = todayKey()): [number, number] {
+  if (hasCheckin(task)) return [fromKey(day).getTime(), fromKey(addDays(day, 1)).getTime()]
   const base = fromKey(date).getTime()
   const rule = task.auto
   const r = occurrenceMinutes(task)

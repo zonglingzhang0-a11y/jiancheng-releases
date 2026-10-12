@@ -213,7 +213,9 @@ function sampleTasks(): Task[] {
     // 跨午夜的每日日程：色带上分成两段，不进「长期」
     mk({ title: '睡觉', start: '23:00', end: '07:00', days: 1, icon: 'Moon', color: 'slate', repeat: { type: 'daily', weekdays: [], until: null } }),
     // 跨天的长期事：一周以内画大框，一周以上合并成虚线
-    mk({ title: '出差 · 杭州', date: addDays(today, -1), allDay: true, days: 2, icon: 'Plane' }),
+    mk({ title: '出差 · 杭州', date: addDays(today, -1), allDay: true, days: 2, icon: 'Plane', checkin: false }),
+    // 旧数据：长期的事设了每天重复，现在按一件、每天打卡显示
+    mk({ title: '六级备考', date: addDays(today, -3), allDay: true, days: 62, repeat: { type: 'daily', weekdays: [], until: null } }),
     mk({ title: '考试周', date: addDays(today, -5), allDay: true, days: 11 }),
     mk({ title: '健身打卡 21 天', date: addDays(today, -12), allDay: true, days: 20 }),
     // 说不准的：过了预计还没结束、没有结束日期、预计区间、开始说不准
@@ -228,7 +230,7 @@ function sampleTasks(): Task[] {
 }
 
 export function createMockApi(): Api {
-  const STORAGE = 'jc.mock.data.v4'
+  const STORAGE = 'jc.mock.data.v5'
   let data: AppData
   try {
     data = JSON.parse(localStorage.getItem(STORAGE) ?? '') as AppData

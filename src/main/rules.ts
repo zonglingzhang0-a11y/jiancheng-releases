@@ -4,6 +4,7 @@ import { basename, join } from 'path'
 import {
   addDays,
   formatDuration,
+  hasCheckin,
   matchedSeconds,
   occurrenceDates,
   occurrenceKey,
@@ -133,12 +134,17 @@ export class RuleEngine extends EventEmitter {
     const next: Record<string, AutoProgress> = {}
 
     // 今天在进行的每一次发生，包括前几天开始、延续到今天的跨天日程
-    for (const { task, date } of occurrencesOn(data.tasks, today)) {
+    for (const { task, date: start } of occurrencesOn(data.tasks, today)) {
       const rule = task.auto
       if (!rule?.enabled) continue
-      const segments = occurrenceDates(task, date)
-        .filter((d) => d <= today)
-        .flatMap((d) => this.segmentsOf(d, today))
+      // 每天打卡的长期事：和每天重复的事一样，今天这一格单独算
+      const daily = hasCheckin(task)
+      const date = daily ? today : start
+      const segments = daily
+        ? this.segmentsOf(today, today)
+        : occurrenceDates(task, start)
+            .filter((d) => d <= today)
+            .flatMap((d) => this.segmentsOf(d, today))
       const key = occurrenceKey(task.id, date)
       const completion = data.completions[key]
       const required = requiredSeconds(rule)
@@ -146,12 +152,12 @@ export class RuleEngine extends EventEmitter {
       let detail = ''
 
       if (rule.kind === 'file') {
-        this.scanFile(task, key, date)
+        this.scanFile(task, key, start)
         const hit = this.fileHits.get(key)?.hit
         seconds = hit ? 1 : 0
         detail = hit ? `${hit.name} · ${clock(hit.mtime)} 更新` : '等待文件更新'
       } else {
-        seconds = matchedSeconds(task, date, segments)
+        seconds = matchedSeconds(task, start, segments)
         detail = `${formatDuration(seconds, true)} / ${formatDuration(required, true)}`
       }
 

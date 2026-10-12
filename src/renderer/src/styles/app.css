@@ -1718,6 +1718,13 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+.checkin-line {
+  gap: 10px;
+}
+.checkin-note {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
 .when-dur {
   margin-top: -4px;
   font-size: 12px;
@@ -3167,6 +3174,20 @@ html.route-panel body {
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* 不打卡的长期事（出差、假期）：没有勾，留出同样的位置对齐 */
+.lng-nock {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+}
+.lng-nock::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
 .lng.done .ttl {
   color: var(--ink-3);
   text-decoration: line-through;
@@ -3246,9 +3267,9 @@ html.route-panel body {
   border-top-right-radius: 2px;
   border-bottom-right-radius: 2px;
 }
+/* 已经过去的那段 */
 .spanbox.done {
   background: var(--ink-3);
-  text-decoration: line-through;
 }
 .spanbox.hot {
   box-shadow: 0 0 0 2px var(--ink-4);
