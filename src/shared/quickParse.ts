@@ -108,7 +108,7 @@ export function matchApp(query: string, apps: QuickApp[]): QuickApp | null {
 
 function toHour(h: number, period: string | undefined, fallbackPm: boolean): number {
   if (period) {
-    if (/下午|傍晚|晚上|今晚/.test(period)) return h < 12 ? h + 12 : h
+    if (/下午|傍晚|晚/.test(period)) return h < 12 ? h + 12 : h
     if (period === '中午') return h <= 3 ? h + 12 : h
     if (period === '凌晨') return h === 12 ? 0 : h
     return h === 12 && period !== '上午' ? 12 : h
@@ -117,7 +117,7 @@ function toHour(h: number, period: string | undefined, fallbackPm: boolean): num
   return fallbackPm && h >= 1 && h <= 6 ? h + 12 : h
 }
 
-const PERIOD = '(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|今晚)?'
+const PERIOD = '(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|今晚|晚|早)?'
 const POINT = '(\\d{1,2})(?:[:：](\\d{2})|点(?:(半)|(\\d{1,2})分?)?)'
 const SEP = '(?:到|至|-|–|—|~|～)'
 /** 能当作日期的说法（用于「A 到 B」） */
@@ -318,7 +318,7 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
   /** 预计的总天数范围，或者预计结束的日期范围 */
   let length: [number, number] | null = null
   let endPeriod: [string, string] | null = null
-  if (start === null && repeat.type === 'none') {
+  if (start === null) {
     // 「找到为止」「做完为止」：还没定结束
     if (take(/(?:[做找读写搞弄学看改修练考背装][完到好定会成齐]|完成|结束)为止/)) endMode = 'open'
     // 「预计 10 月初结束」「月底前搞定」
@@ -366,7 +366,7 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
 
   // 把说不准的部分换成相对开始那天的天数：最早结束不早于最晚开始
   let daysMax = 0
-  if (allDay && repeat.type === 'none') {
+  if (allDay) {
     if (endPeriod && endPeriod[1] >= date) {
       days = Math.max(startMax, dayDiff(date, endPeriod[0]))
       daysMax = Math.max(days, dayDiff(date, endPeriod[1]))
@@ -409,6 +409,12 @@ export function parseQuick(input: string, opts: { today: string; apps?: QuickApp
   if (start !== null && end !== null && end > 1440) {
     days = Math.floor((end - 1) / 1440)
     end -= days * 1440
+  }
+  // 长期的事（跨两天以上）不重复：说了「每天」也只算一件，这段时间里每天打卡
+  const multi = allDay ? days > 0 || !!endMode || startMax > 0 : start !== null && end !== null && days * 1440 + end - start >= 1440
+  if (multi && repeat.type !== 'none') {
+    repeat = { type: 'none', weekdays: [], until: null }
+    repeatLabel = '每天打卡'
   }
   if (allDay && (endMode || startMax)) {
     const sl = (k: number): string => shortLabel(addDays(date, k), today)

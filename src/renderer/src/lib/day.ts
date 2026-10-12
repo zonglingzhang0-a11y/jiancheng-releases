@@ -5,6 +5,7 @@ import {
   dayDiff,
   fromKey,
   fuzzOf,
+  hasCheckin,
   isLong,
   occurrenceDates,
   occurrenceKey,
@@ -74,8 +75,13 @@ export interface SpanItem {
   fadeOut: number
   /** 结束、开始说不准时清单里给的按钮：过了预计点「结束」，预计开始的那几天点「开始」 */
   action: 'end' | 'start' | null
-  /** 结束说不准（预计区间 / 没定 / 超出预计）：打勾就等于在这一天结束 */
+  /** 结束说不准（预计区间 / 没定 / 超出预计） */
   fuzzyEnd: boolean
+  /** 每天打卡：勾的是正在看的那一天（键和每天重复一样是 任务@那天）；关掉的只显示一段时间 */
+  checkin: boolean
+  checkKey: string
+  /** 这段时间里到正在看的那天为止，打过几天卡 */
+  checkedDays: number
   /** 正在看的那一天 */
   viewDate: string
   progress: AutoProgress | null
@@ -176,8 +182,13 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
     const dayNo = dayDiff(d, date) + 1
     const daysLeft = totalDays - dayNo
     const key = occurrenceKey(task.id, d)
-    const c = data.completions[key]
-    const p = progress[key] ?? null
+    const checkin = hasCheckin(task)
+    const checkKey = occurrenceKey(task.id, date)
+    const c = checkin ? data.completions[checkKey] : undefined
+    const p = checkin ? (progress[checkKey] ?? null) : null
+    const checkedDays = checkin
+      ? dates.filter((x) => x <= date && (data.completions[occurrenceKey(task.id, x)]?.done ?? (x === date && p?.done) ?? false)).length
+      : 0
     const f = fuzzOf(task, today)
     const k = dayNo - 1
     const waiting = k < f.sureFrom
@@ -196,6 +207,8 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
     } else if (f.end === 'range' || (f.end === 'over' && k <= latest)) {
       label = k < earliest ? `预计还剩 ${earliest - k}–${latest - k} 天结束` : latest === k ? '预计今天结束' : `预计 ${latest - k} 天内结束`
       dayText = `${dayNo} / ${earliest + 1}–${latest + 1} 天`
+      // 进了预计区间，随时可能结束：给个「结束」
+      if (k >= earliest && date === today) action = 'end'
     } else if (f.end === 'over') {
       label = `已超出预计 ${k - latest} 天`
       dayText = `第 ${dayNo} 天`
@@ -203,7 +216,9 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
     } else if (f.end === 'open') {
       label = dayNo === 1 ? '今天开始' : `已进行 ${dayNo} 天`
       dayText = '没有结束日期'
+      if (date === today) action = 'end'
     }
+    if (checkin && !waiting) dayText = `${dayText} · 已打卡 ${checkedDays} 天`
     const len = f.last + 1
     out.push({
         task,
@@ -230,6 +245,9 @@ export function spanItems(data: AppData, progress: Record<string, AutoProgress>,
         fadeOut: f.end === 'fixed' ? 1 : (f.sureTo + 1) / len,
         action,
         fuzzyEnd: f.end !== 'fixed',
+        checkin,
+        checkKey,
+        checkedDays,
         viewDate: date,
         progress: p
       })
@@ -253,7 +271,7 @@ export function spansIn(data: AppData, from: string, to: string): SpanRange[] {
         task,
         date,
         totalDays: dates.length,
-        done: data.completions[key]?.done ?? false,
+        done: dates[dates.length - 1] < today,
         s: dates[0],
         e: dates[dates.length - 1],
         fuzz,
@@ -281,12 +299,24 @@ export const crossTag = (i: DayItem): string | null => (i.part === 'head' ? '到
 export const timedItems = (items: DayItem[]): DayItem[] => items.filter((i) => i.start !== null).sort((a, b) => a.start! - b.start!)
 export const floatItems = (items: DayItem[]): DayItem[] => items.filter((i) => i.start === null)
 
-/** 某天的完成度；将来的日子返回 null。跨午夜的下半段不重复计数 */
+/** 某天要打卡的长期事（开了每天打卡的才算） */
+export function checkinsOn(data: AppData, progress: Record<string, AutoProgress>, date: string): { key: string; done: boolean }[] {
+  return occurrencesOn(data.tasks, date)
+    .filter(({ task }) => hasCheckin(task))
+    .map(({ task }) => {
+      const key = occurrenceKey(task.id, date)
+      return { key, done: data.completions[key]?.done ?? progress[key]?.done ?? false }
+    })
+}
+
+/** 某天的完成度；将来的日子返回 null。跨午夜的下半段不重复计数；开了每天打卡的长期事也算 */
 export function dayRatio(data: AppData, progress: Record<string, AutoProgress>, date: string): number | null {
   if (date > todayKey()) return null
   const items = dayItems(data, progress, date).filter((i) => i.part !== 'tail')
-  if (!items.length) return 0
-  return items.filter((i) => i.done).length / items.length
+  const checks = checkinsOn(data, progress, date)
+  const total = items.length + checks.length
+  if (!total) return 0
+  return (items.filter((i) => i.done).length + checks.filter((c) => c.done).length) / total
 }
 
 export const carriedLabel = (days: number): string => (days === 1 ? '昨天' : `${days} 天前`)

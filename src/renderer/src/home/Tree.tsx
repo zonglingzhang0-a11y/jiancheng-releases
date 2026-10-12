@@ -147,7 +147,7 @@ function SpanRow({ item }: { item: SpanItem }): React.JSX.Element {
   const openTask = useStore((s) => s.openTask)
   const setHotSpan = useStore((s) => s.setHotSpan)
   const icons = useStore((s) => s.data.settings.look.icons)
-  // 结束说不准的事，打勾就是在这一天结束
+  // 「结束」：说不准什么时候结束的事，在这一天结束
   const finish = (e: React.MouseEvent): void => {
     burstAt(e)
     finishSpan(item.task, item.viewDate)
@@ -161,19 +161,24 @@ function SpanRow({ item }: { item: SpanItem }): React.JSX.Element {
       onMouseLeave={() => setHotSpan(null)}
       onFocus={() => setHotSpan(item.key)}
       onBlur={() => setHotSpan(null)}
-      onClick={() => openTask(item.task, item.date)}
+      onClick={() => openTask(item.task, item.viewDate)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') openTask(item.task, item.date)
+        if (e.key === 'Enter') openTask(item.task, item.viewDate)
       }}
     >
-      <Check
-        on={item.done}
-        onToggle={(e) => {
-          if (!item.done && item.fuzzyEnd) return finish(e)
-          if (!item.done) burstAt(e)
-          toggle(item.task.id, item.date)
-        }}
-      />
+      {item.checkin ? (
+        // 每天打卡：勾的是这一天，和每天重复的事一样
+        <Check
+          on={item.done}
+          label={item.done ? '取消今天的打卡' : '今天打卡'}
+          onToggle={(e) => {
+            if (!item.done) burstAt(e)
+            toggle(item.task.id, item.viewDate)
+          }}
+        />
+      ) : (
+        <span className="lng-nock" aria-hidden="true" />
+      )}
       {icons && <TaskIcon name={item.icon} size={14} className="ico" />}
       <span className="ttl">{item.task.title}</span>
       <span className="lng-left">
@@ -226,14 +231,16 @@ export function Tree({ items, spans }: { items: DayItem[]; spans: SpanItem[] }):
     }
   }
 
+  // 开了每天打卡的长期事也算进这一天的安排
+  const checks = spans.filter((s) => s.checkin)
   const counted = items.filter((i) => i.part !== 'tail')
-  const done = counted.filter((i) => i.done).length
+  const done = counted.filter((i) => i.done).length + checks.filter((s) => s.done).length
   return (
     <aside className="tree" aria-label="当天的日程">
       <div className="tree-head">
         <span>{cursor === todayKey() ? '今天的安排' : '这一天的安排'}</span>
         <span className="tnum">
-          {done} / {counted.length}
+          {done} / {counted.length + checks.length}
         </span>
       </div>
       {items.length === 0 && spans.length === 0 && <div className="tree-empty">在上面的输入框里写一句话，或点「新建」</div>}
@@ -279,7 +286,7 @@ export function Tree({ items, spans }: { items: DayItem[]; spans: SpanItem[] }):
             <Hourglass size={14} className="fico" />
             <span className="fold-name">长期</span>
             <span className="fold-count tnum">
-              {spans.filter((s) => s.done).length}/{spans.length}
+              {checks.length ? `${checks.filter((s) => s.done).length}/${checks.length}` : spans.length}
             </span>
           </button>
           <div className="fold-body">

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { addDays, fromKey, todayKey } from '@shared/schedule'
 import { useStore } from '../store'
-import { dayItems, dayRatio, spansIn, surenessOn, timedItems, type SpanRange } from '../lib/day'
+import { checkinsOn, dayItems, dayRatio, spansIn, surenessOn, timedItems, type SpanRange } from '../lib/day'
 import { sunOf } from '../lib/cal'
 import { linearGradient, ribbonGradient, xOf } from '../lib/ribbon'
 import { monthMatrix, sameMonth, WEEKDAY_SHORT, weekDates } from '../lib/dates'
@@ -128,7 +128,7 @@ export function Ticker(): React.JSX.Element {
     for (const d of days) {
       const items = dayItems(data, progress, d)
       map.set(d, {
-        n: items.length,
+        n: items.length + checkinsOn(data, progress, d).length,
         r: dayRatio(data, progress, d),
         ticks: timedItems(items).map((i) => ({ l: xOf(i.start!), w: Math.max(0.02, xOf(i.end!) - xOf(i.start!)), done: i.done }))
       })

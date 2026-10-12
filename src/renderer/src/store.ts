@@ -82,7 +82,7 @@ interface Store {
   deleteTask(id: string, mode: 'all' | 'one', date?: string): Promise<void>
   toggle(taskId: string, date: string): Promise<void>
   toggleSub(task: Task, subId: string, date: string): Promise<void>
-  /** 结束说不准的长期事：在 on 这一天结束，变成确定的结束日期，并标为完成 */
+  /** 结束说不准的长期事：在 on 这一天结束，变成确定的结束日期 */
   finishSpan(task: Task, on: string): Promise<void>
   /** 开始说不准的长期事：从 on 这一天开始，变成确定的开始日期，结束日期不动 */
   beginSpan(task: Task, on: string): Promise<void>
@@ -333,11 +333,6 @@ export const useStore = create<Store>((set, get) => ({
     const days = Math.max(0, dayDiff(task.date, on))
     const startMax = rest.startMax ? Math.min(rest.startMax, days) : undefined
     await get().saveTask({ ...rest, days, startMax, updatedAt: Date.now() })
-    const key = occurrenceKey(task.id, task.date)
-    const { data } = get()
-    if (data.completions[key]?.done) return
-    set({ data: { ...data, completions: { ...data.completions, [key]: { done: true, by: 'manual', at: Date.now() } } } })
-    await api().setCompletion(key, true)
   },
 
   async beginSpan(task, on) {

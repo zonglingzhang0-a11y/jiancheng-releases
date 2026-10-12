@@ -63,6 +63,11 @@ export interface Task {
   daysMax?: number
   /** 开始说不准：最早 date 那天，最晚 date 之后第 startMax 天开始 */
   startMax?: number
+  /**
+   * 长期的事每天打卡（默认开）：这段时间里每天一格，和「每天重复」一样按天记完成、子待办和智能完成。
+   * false：只显示一段时间（出差、假期这类）
+   */
+  checkin?: boolean
   color: ColorKey
   repeat: Repeat
   auto: AutoRule | null
