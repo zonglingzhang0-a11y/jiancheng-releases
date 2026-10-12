@@ -10,6 +10,7 @@ import { Sheet } from './editor/Sheet'
 import { MonitorPage } from './pages/MonitorPage'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ShotViewer } from './components/ShotViewer'
+import { WhatsNew } from './components/WhatsNew'
 import brandMark from '../../../resources/icon-src/crop16.svg?url'
 import { Toast } from './components/Toast'
 import { cx } from './components/ui'
@@ -131,6 +132,7 @@ export function App(): React.JSX.Element {
       <SettingsDialog />
       <ShotViewer />
       <Toast />
+      <WhatsNew />
     </div>
   )
 }

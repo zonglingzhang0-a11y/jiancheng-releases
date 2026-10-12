@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { CHANGELOG } from '@shared/changelog'
 import { Camera, FolderOpen, Info, MousePointerClick, Palette, Radar, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, Zap } from 'lucide-react'
 import { HotkeyRecorder } from './HotkeyRecorder'
 import type { Settings, ShotStats } from '@shared/types'
@@ -195,6 +196,29 @@ function EntrySettings({ settings, set }: { settings: Settings; set: <K extends 
   )
 }
 
+/** 设置 → 系统：每个版本改了什么 */
+function Changelog(): React.JSX.Element {
+  return (
+    <div className="changelog">
+      <div className="side-label">更新说明</div>
+      {CHANGELOG.map((e) => (
+        <div key={e.version} className="cl-ver">
+          <div className="cl-head">
+            <b className="tnum">{e.version}</b>
+            <span className="tnum">{e.date}</span>
+            {e.version === __APP_VERSION__ && <span className="cl-cur">正在用</span>}
+          </div>
+          <ul>
+            {e.items.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function UpdateRow(): React.JSX.Element {
   const update = useStore((s) => s.update)
   const time = update.checkedAt ? new Date(update.checkedAt).toTimeString().slice(0, 5) : ''
@@ -347,6 +371,7 @@ export function SettingsDialog(): React.JSX.Element {
                     打开
                   </button>
                 </Row>
+                <Changelog />
                 <div className="set-note">
                   <Info size={13} />
                   <span>

@@ -3306,3 +3306,98 @@ html.route-panel body {
 .mwrap .mgrid {
   padding-top: 0;
 }
+
+/* 更新后第一次打开：右下角的「已更新到 x.x.x」 */
+.whatsnew {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 40;
+  width: 340px;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(23, 24, 27, 0.08);
+}
+.wn-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.wn-head b {
+  font-size: 14px;
+  font-weight: 600;
+}
+.wn-ico {
+  flex: none;
+  color: var(--ink);
+}
+.wn-from {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.wn-x {
+  margin-left: auto;
+}
+.wn-list {
+  margin: 8px 0 10px;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.wn-more {
+  padding: 0;
+  border: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--ink-4);
+}
+.wn-more:hover {
+  text-decoration-color: var(--ink);
+}
+
+/* 设置 → 系统 里的更新说明 */
+.changelog {
+  margin-top: 6px;
+}
+.cl-ver {
+  padding: 10px 0;
+  border-top: 1px solid var(--hair);
+}
+.cl-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.cl-head b {
+  font-size: 14px;
+  font-weight: 600;
+}
+.cl-head span {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cl-head .cl-cur {
+  padding: 0 7px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--ink);
+}
+.cl-ver ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
