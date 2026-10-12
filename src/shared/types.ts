@@ -116,6 +116,8 @@ export interface Settings {
   floatHideFullscreen: boolean
   /** 已忽略的「设为每日任务」建议（进程名） */
   dismissedSuggestions: string[]
+  /** 上次打开时的版本号：变了就在右下角提示这次改了什么 */
+  lastVersion: string
   /** 桌角卡片 */
   card: CardSettings
   /** 外观：字体、时钟、色带、首页显示项 */
@@ -361,6 +363,7 @@ export const DEFAULT_SETTINGS: Settings = {
   floatPos: null,
   floatHideFullscreen: true,
   dismissedSuggestions: [],
+  lastVersion: '',
   card: { enabled: true, size: 'm', layer: 'top', fadeAway: false, hideFullscreen: true, pos: null },
   look: {
     preset: 'round',
